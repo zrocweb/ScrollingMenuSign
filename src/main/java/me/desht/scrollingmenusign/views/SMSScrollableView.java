@@ -1,10 +1,11 @@
 package me.desht.scrollingmenusign.views;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Observable;
 import java.util.Scanner;
 
 import me.desht.dhutils.ConfigurationManager;
@@ -18,33 +19,41 @@ import org.bukkit.entity.Player;
 public abstract class SMSScrollableView extends SMSView {
 	public static final String MAX_TITLE_LINES = "max_title_lines";
 
-	private boolean perPlayerScrolling;
 	private boolean wrap;
-	private int lastScrollPos;
 	private final Map<String,Integer> playerScrollPos = new HashMap<String, Integer>();
-
+	private final ScrollPosStack storedScrollPos = new ScrollPosStack();
+	
 	public SMSScrollableView(SMSMenu menu) {
 		this(null, menu);
 	}
-	
+
 	public SMSScrollableView(String name, SMSMenu menu) {
 		super(name, menu);
-		lastScrollPos = 1;
 		wrap = true;
-		perPlayerScrolling = true;
-		
+
 		registerAttribute(MAX_TITLE_LINES, 0);
 	}
 
 	@Override
 	public Map<String, Object> freeze() {
 		Map<String, Object> map = super.freeze();
-		// We only save the global scroll position so per-player views such as maps & spout
-		// scroll positions won't be saved but global views like signs will be.
-		map.put("scrollPos", lastScrollPos);
+		
 		return map;
 	}
 	
+	@Override
+	public void pushMenu(String playerName, SMSMenu newActive) {
+		super.pushMenu(playerName, newActive);
+		storedScrollPos.pushScrollPos(playerName, getScrollPos(playerName));
+		setScrollPos(playerName, 1);
+	}
+	
+	@Override
+	public SMSMenu popMenu(String playerName) {		
+		setScrollPos(playerName, storedScrollPos.popScrollPos(playerName));
+		return super.popMenu(playerName);
+	}
+
 	public boolean isWrap() {
 		return wrap;
 	}
@@ -52,38 +61,11 @@ public abstract class SMSScrollableView extends SMSView {
 	public void setWrap(boolean wrap) {
 		this.wrap = wrap;
 	}
-	
-	public boolean isPerPlayerScrolling() {
-		return perPlayerScrolling;
-	}
-
-	protected void setPerPlayerScrolling(boolean perPlayerScrolling) {
-		this.perPlayerScrolling = perPlayerScrolling;
-	}
 
 	protected void thaw(ConfigurationSection node) throws SMSException {
 		super.thaw(node);
-		lastScrollPos = node.getInt("scrollPos", 1);
-		if (lastScrollPos < 1 || lastScrollPos > getMenu().getItemCount())
-			lastScrollPos = 1;
 	}
 
-	/**
-	 * Get the last scroll position (currently-selected item) for this view.  If the scroll position
-	 * is out of range (possibly because an item was deleted from the menu), it will be automatically
-	 * adjusted to be in range before being returned.
-	 * 
-	 * @return	The scroll position
-	 */
-	public int getLastScrollPos() {
-		if (lastScrollPos < 1)
-			lastScrollPos = 1;
-		else if (lastScrollPos > getMenu().getItemCount())
-			lastScrollPos = getMenu().getItemCount();
-		
-		return lastScrollPos;
-	}
-	
 	/**
 	 * Get the given player's scroll position (currently-selected item) for this view.  If the scroll position
 	 * is out of range (possibly because an item was deleted from the menu), it will be automatically
@@ -93,16 +75,14 @@ public abstract class SMSScrollableView extends SMSView {
 	 * @return				The scroll position
 	 */
 	public int getScrollPos(String playerName) {
-		if (perPlayerScrolling) {
-			if (!playerScrollPos.containsKey(playerName) || playerScrollPos.get(playerName) < 1) {
-				setScrollPos(playerName, 1);
-			} else if (playerScrollPos.get(playerName) > getMenu().getItemCount())
-				setScrollPos(playerName, getMenu().getItemCount());
+		playerName = getPlayerContext(playerName);
 
-			return playerScrollPos.get(playerName);
-		} else {
-			return getLastScrollPos();
-		}
+		if (!playerScrollPos.containsKey(playerName) || playerScrollPos.get(playerName) < 1) {
+			setScrollPos(playerName, 1);
+		} else if (playerScrollPos.get(playerName) > getActiveMenuItemCount(playerName))
+			setScrollPos(playerName, getActiveMenuItemCount(playerName));
+
+		return playerScrollPos.get(playerName);
 	}
 
 	/**
@@ -112,15 +92,12 @@ public abstract class SMSScrollableView extends SMSView {
 	 * @param scrollPos		The scroll position
 	 */
 	public void setScrollPos(String playerName, int scrollPos) {
-		lastScrollPos = scrollPos;
-		if (perPlayerScrolling) {
-			playerScrollPos.put(playerName, scrollPos);
-			setDirty(playerName, true);
-		} else {
-			setDirty(true);
-		}
+		playerName = getPlayerContext(playerName);
+
+		playerScrollPos.put(playerName, scrollPos);
+		setDirty(playerName, true);
 	}
-	
+
 	/**
 	 * Sets the current selected item for the given player to the next item.
 	 * 
@@ -128,29 +105,28 @@ public abstract class SMSScrollableView extends SMSView {
 	 */
 	public void scrollDown(String playerName) {
 		int pos = getScrollPos(playerName) + 1;
-		if (pos > getMenu().getItemCount())
-			pos = wrap ? 1 : getMenu().getItemCount();
+		if (pos > getActiveMenuItemCount(playerName)) {
+			pos = wrap ? 1 : getActiveMenuItemCount(playerName);
+		}
 		setScrollPos(playerName, pos);
 	}
-	
+
 	/**
 	 * Sets the current selected item for the given player to the previous item.
 	 * 
 	 * @param playerName	The player to scroll the view for
 	 */
 	public void scrollUp(String playerName) {
-		if (getMenu().getItemCount() == 0)
+		if (getActiveMenuItemCount(playerName) == 0)
 			return;
-		
+
 		int pos = getScrollPos(playerName) - 1;
-		if (pos <= 0)
-			pos = wrap ? getMenu().getItemCount() : 1;
+		if (pos <= 0) {
+			pos = wrap ? getActiveMenuItemCount(playerName) : 1;
+		}
 		setScrollPos(playerName, pos);
 	}
-	
-	@Override
-	public abstract void update(Observable menu, Object arg1);
-	
+
 	/* (non-Javadoc)
 	 * @see me.desht.scrollingmenusign.views.SMSView#clearPlayerForView(org.bukkit.entity.Player)
 	 */
@@ -159,7 +135,7 @@ public abstract class SMSScrollableView extends SMSView {
 		super.clearPlayerForView(player);
 		playerScrollPos.remove(player.getName());
 	}
-	
+
 	/**
 	 * Get the suggested line length in characters.  Default is 0 - subclasses should override this
 	 * as appropriate.  Line length of 0 will disable any splitting.
@@ -170,7 +146,7 @@ public abstract class SMSScrollableView extends SMSView {
 		return 0;
 	}
 
-	
+
 	/**
 	 * Get the desired maximum number of title lines for this view.
 	 * @return
@@ -179,7 +155,7 @@ public abstract class SMSScrollableView extends SMSView {
 		int max = (Integer) getAttribute(MAX_TITLE_LINES);
 		return max > 0 ? max :  ScrollingMenuSign.getInstance().getConfig().getInt("sms.max_title_lines", 1);
 	}
-	
+
 	/**
 	 * Get the hard maximum on the number of title lines this view supports.  Override in subclasses.
 	 * @return
@@ -187,30 +163,30 @@ public abstract class SMSScrollableView extends SMSView {
 	protected int getHardMaxTitleLines() {
 		return 1;
 	}
-	
+
 	/**
 	 * Split the menu's title in the view's maximum line count, based on the view's suggested line length.
 	 * 
 	 * @return
 	 */
-	public List<String> splitTitle() {
-		String title = variableSubs(getMenu().getTitle());
+	public List<String> splitTitle(String playerName) {
+		String title = variableSubs(getActiveMenuTitle(playerName));
 		int lineLength = getLineLength();
 		List<String> result = new ArrayList<String>();
 		int maxLines = Math.min(getMaxTitleLines(), getHardMaxTitleLines());
-		
+
 		if (lineLength == 0 || maxLines == 1) {
 			result.add(title);
 			return result;
 		}
-		
+
 		Scanner s = new Scanner(title);
 		StringBuilder sb = new StringBuilder(title.length());
 		MarkupTracker markup = new MarkupTracker();
 		while (s.hasNext()) {
 			String word = s.next();
 			markup.update(MarkupTracker.findMarkup(word));
-//			LogUtils.finer(getName() + ": buflen = " + sb.length() + " wordlen = " + word.length() + " line length = " + lineLength);
+			//			LogUtils.finer(getName() + ": buflen = " + sb.length() + " wordlen = " + word.length() + " line length = " + lineLength);
 			if (sb.length() + word.length() + 1 <= lineLength || result.size() >= maxLines - 1) {
 				// continue appending
 				if (sb.length() > 0) sb.append(" ");
@@ -223,10 +199,10 @@ public abstract class SMSScrollableView extends SMSView {
 			}
 		}
 		result.add(sb.toString());
-		
+
 		return result;
 	}
-	
+
 	/* (non-Javadoc)
 	 * @see me.desht.scrollingmenusign.views.SMSView#onConfigurationChanged(me.desht.dhutils.ConfigurationManager, java.lang.String, java.lang.Object, java.lang.Object)
 	 */
@@ -238,17 +214,17 @@ public abstract class SMSScrollableView extends SMSView {
 			setDirty(true);
 		}
 	}
-	
+
 	private static class MarkupTracker {
 		// null indicates value never set, 0 indicates a reset (&R)
 		private Character colour = null;
 		private Character text = null;
-		
+
 		public void update(MarkupTracker other) {
 			if (other.colour != null) this.colour = other.colour;
 			if (other.text != null) this.text = other.text;
 		}
-		
+
 		@Override
 		public String toString() {
 			String s = "";
@@ -256,7 +232,7 @@ public abstract class SMSScrollableView extends SMSView {
 			if (text != null && text != 0) s += "\u00a7" + text;
 			return s;
 		}
-		
+
 		public static MarkupTracker findMarkup(String s) {
 			MarkupTracker m = new MarkupTracker();
 			for (int i = 0; i < s.length() - 1; i++	) {
@@ -272,6 +248,26 @@ public abstract class SMSScrollableView extends SMSView {
 				}
 			}
 			return m;
+		}
+	}
+	
+	private class ScrollPosStack {
+		private Map<String,Deque<Integer>> stacks = new HashMap<String, Deque<Integer>>();
+
+		private void verify(String playerName) {
+			if (!stacks.containsKey(playerName)) {
+				stacks.put(playerName, new ArrayDeque<Integer>());
+			}
+		}
+		public void pushScrollPos(String playerName, int pos) {
+			verify(playerName);
+			stacks.get(playerName).push(pos);
+		}
+		
+		public int popScrollPos(String playerName) {
+			verify(playerName);
+			Deque<Integer> stack = stacks.get(playerName);
+			return stack.isEmpty() ? 1 : stack.pop();
 		}
 	}
 }

@@ -29,8 +29,8 @@ import me.desht.scrollingmenusign.views.redout.Switch;
 /**
  * @author desht
  *
- * This is just like a SMSScrollableView but per-player scrolling is false by default.
- * So only one scroll position is maintained for all players.
+ * This is just like a SMSScrollableView but per-player scrolling/submenus is not used
+ * here.
  * 
  * It also maintains a set of output switches which are powered/unpowered depending on
  * the selected item in this view.
@@ -44,14 +44,15 @@ public abstract class SMSGlobalScrollableView extends SMSScrollableView {
 	private final Set<RedstoneControlSign> controlSigns = new HashSet<RedstoneControlSign>();
 
 	private int pulseResetTask;
+	private int lastScrollPos;
 
 	public SMSGlobalScrollableView(SMSMenu menu) {
 		this(null, menu);
+		lastScrollPos = 1;
 	}
 
 	public SMSGlobalScrollableView(String name, SMSMenu menu) {
 		super(name, menu);
-		setPerPlayerScrolling(false);
 		registerAttribute(RS_OUTPUT_MODE, RedstoneOutputMode.SELECTED);
 		registerAttribute(PULSE_TICKS, ScrollingMenuSign.getInstance().getConfig().getLong("sms.redstoneoutput.pulseticks", 20));
 		pulseResetTask = -1;
@@ -77,8 +78,24 @@ public abstract class SMSGlobalScrollableView extends SMSScrollableView {
 		autosave();
 	}
 
+	@Override
+	protected String getPlayerContext(String playerName) {
+		return GLOBAL_PSEUDO_PLAYER;
+	}
+
+	/**
+	 * Get the last scroll position (currently-selected item) for this view.  If the scroll position
+	 * is out of range (possibly because an item was deleted from the menu), it will be automatically
+	 * adjusted to be in range before being returned.
+	 * 
+	 * @return	The scroll position
+	 */
+	public int getScrollPos() {
+		return super.getScrollPos(GLOBAL_PSEUDO_PLAYER);
+	}
+
 	public void updateSwitchPower() {
-		SMSMenuItem item = getMenu().getItemAt(getLastScrollPos());
+		SMSMenuItem item = getActiveMenuItemAt(null, getScrollPos());
 		if (item == null) {
 			return;
 		}
@@ -90,7 +107,7 @@ public abstract class SMSGlobalScrollableView extends SMSScrollableView {
 	}
 
 	public void toggleSwitchPower() {
-		SMSMenuItem item = getMenu().getItemAt(getLastScrollPos());
+		SMSMenuItem item = getActiveMenuItemAt(null, getScrollPos());
 		if (item == null) {
 			return;
 		}
@@ -103,7 +120,7 @@ public abstract class SMSGlobalScrollableView extends SMSScrollableView {
 	}
 
 	public void pulseSwitchPower(boolean pulseAll) {
-		SMSMenuItem item = getMenu().getItemAt(getLastScrollPos());
+		SMSMenuItem item = getActiveMenuItemAt(null, getScrollPos());
 		if (item == null) {
 			return;
 		}
@@ -142,6 +159,8 @@ public abstract class SMSGlobalScrollableView extends SMSScrollableView {
 	public Map<String,Object> freeze() {
 		Map<String, Object> map = super.freeze();
 
+		map.put("scrollPos", lastScrollPos);
+
 		Map<String,Map<String,Object>> l = new HashMap<String, Map<String,Object>>();
 		for (Switch sw : switches) {
 			l.put(sw.getName(), sw.freeze());
@@ -163,6 +182,10 @@ public abstract class SMSGlobalScrollableView extends SMSScrollableView {
 	@Override
 	protected void thaw(ConfigurationSection node) throws SMSException {
 		super.thaw(node);
+
+		lastScrollPos = node.getInt("scrollPos", 1);
+		if (lastScrollPos < 1 || lastScrollPos > getNativeMenu().getItemCount())
+			lastScrollPos = 1;
 
 		ConfigurationSection sw = node.getConfigurationSection("switches");
 		if (sw != null) {
@@ -218,6 +241,8 @@ public abstract class SMSGlobalScrollableView extends SMSScrollableView {
 			break;
 		case PULSEANY:
 			pulseSwitchPower(true);
+			break;
+		default:
 			break;
 		}
 	}

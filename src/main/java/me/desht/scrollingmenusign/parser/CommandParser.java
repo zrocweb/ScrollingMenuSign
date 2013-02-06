@@ -23,6 +23,7 @@ import me.desht.scrollingmenusign.SMSException;
 import me.desht.scrollingmenusign.SMSMacro;
 import me.desht.scrollingmenusign.SMSVariables;
 import me.desht.scrollingmenusign.ScrollingMenuSign;
+import me.desht.scrollingmenusign.commandlets.CommandletManager;
 import me.desht.scrollingmenusign.enums.ReturnStatus;
 import me.desht.scrollingmenusign.expector.ExpectCommandSubstitution;
 import me.desht.scrollingmenusign.spout.SpoutUtils;
@@ -192,7 +193,7 @@ public class CommandParser {
 			} else if (key.equals("EXP")) {
 				repl = Integer.toString(new ExperienceManager(player).getCurrentExp());
 			} else {
-				String menuName = view == null ? "???" : view.getMenu().getName();
+				String menuName = view == null ? "???" : view.getActiveMenu(player.getName()).getName();
 				LogUtils.warning("unknown replacement <" + key + "> in command [" + command + "], menu " + menuName);
 				repl = "<" + key + ">";
 			}
@@ -294,8 +295,7 @@ public class CommandParser {
 
 	private void execute(CommandSender sender, SMSView view, ParsedCommand cmd) throws SMSException {
 		if (cmd.isRestricted()) {
-			// restriction checks can stop a command from running, but it's not
-			// an error condition
+			// restriction checks can stop a command from running, but it's not an error condition
 			cmd.setLastError("Restriction checks prevented command from running");
 			cmd.setStatus(ReturnStatus.RESTRICTED);
 			return;
@@ -328,6 +328,8 @@ public class CommandParser {
 		if (cmd.isMacro()) {
 			// run a macro
 			runMacro(sender, view, cmd);
+		} else if (cmd.isCommandlet()) {
+			runCommandlet(sender, view, cmd);
 		} else if (cmd.isWhisper()) {
 			// private message to the player
 			MiscUtil.alertMessage(sender, command);
@@ -431,6 +433,12 @@ public class CommandParser {
 			cmd.setLastError("Unknown macro " + macroName + ".");
 			return;
 		}
+	}
+
+	private void runCommandlet(CommandSender sender, SMSView view, ParsedCommand cmd) {
+		CommandletManager cmdlets = ScrollingMenuSign.getInstance().getCommandletManager();
+		
+		cmdlets.getCommandlet(cmd.getCommand()).execute(cmdlets.getPlugin(), sender, view, cmd.getCommand(), cmd.getQuotedArgs());
 	}
 
 	private void executeLowLevelCommand(CommandSender sender, ParsedCommand cmd, String command) {

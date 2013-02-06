@@ -72,7 +72,7 @@ public class ViewCommand extends AbstractCommand {
 				varName = varName.substring(1);
 				view.setVariable(varName, null);
 				view.autosave();
-				view.update(view.getMenu(), SMSMenuAction.REPAINT);
+				view.update(null, SMSMenuAction.REPAINT);
 				MiscUtil.statusMessage(sender, "Deleted view variable: &a" + varName + "&-.");
 			}
 		} else if (args.length <= 1) {
@@ -85,7 +85,7 @@ public class ViewCommand extends AbstractCommand {
 				if (args.length == 3) {
 					view.setVariable(varName, args[2]);
 					view.autosave();
-					view.update(view.getMenu(), SMSMenuAction.REPAINT);
+					view.update(null, SMSMenuAction.REPAINT);
 				}
 				MiscUtil.statusMessage(sender, String.format("&a%s.$%s&- = &a%s&-", view.getName(), varName, view.getVariable(varName)));
 			} else {
@@ -103,7 +103,10 @@ public class ViewCommand extends AbstractCommand {
 
 	private void showViewDetails(CommandSender sender, SMSView view) {
 		MessagePager pager = MessagePager.getPager(sender).clear();
-		pager.add(String.format("View &e%s&- (%s) :", view.getName(), view.toString()));
+		pager.add(String.format("View &e%s&- (%s) :",
+		                        view.getName(), view.toString()));
+		pager.add(String.format("Native menu: &e%s&-, your active menu: &e%s&-",
+		                        view.getNativeMenu().getName(), view.getActiveMenu(sender.getName()).getName()));
 		for (String k : view.listAttributeKeys(true)) {
 			pager.add(String.format(MessagePager.BULLET + "&e%s&- = &e%s&-", k, view.getAttributeAsString(k, "")));
 		}
