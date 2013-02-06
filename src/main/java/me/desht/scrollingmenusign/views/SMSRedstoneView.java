@@ -60,6 +60,11 @@ public class SMSRedstoneView extends SMSView {
 	}
 
 	@Override
+	public void erase() {
+		// A redstone view doesn't have any visual appearance to erase
+	}
+
+	@Override
 	public String getType() {
 		return "redstone";
 	}
@@ -91,7 +96,7 @@ public class SMSRedstoneView extends SMSView {
 			String label = getAttributeAsString(attr);
 			if (label == null || label.isEmpty())
 				return;
-			SMSMenuItem item = getMenu().getItem(label);
+			SMSMenuItem item = getNativeMenu().getItem(label);
 			List<Player> players = getAffectedPlayers(loc);
 			if (item != null) {
 				if (players != null) {
@@ -107,7 +112,7 @@ public class SMSRedstoneView extends SMSView {
 					item.executeCommand(Bukkit.getConsoleSender(), this);
 				}
 			} else {
-				LogUtils.warning("No such menu item '" + label + "' in menu " + getMenu().getName());
+				LogUtils.warning("No such menu item '" + label + "' in menu " + getNativeMenu().getName());
 			}
 		} catch (SMSException e) {
 			LogUtils.warning(e.getMessage());
@@ -283,6 +288,8 @@ public class SMSRedstoneView extends SMSView {
 		case STONE_PLATE:
 			// check the block below
 			checkNeighbour(event, BlockFace.DOWN);
+		default:
+			break;
 		}
 	}
 
@@ -293,7 +300,7 @@ public class SMSRedstoneView extends SMSView {
 
 		if (rv != null && rv.hasPowerChanged(neighbour.getLocation(), event.getNewCurrent())) {
 			LogUtils.fine("block redstone event @ " + neighbour.getLocation() + ", view = " +
-					rv.getName() + ", menu = " + rv.getMenu().getName() + ", new current = " + event.getNewCurrent());
+					rv.getName() + ", menu = " + rv.getNativeMenu().getName() + ", new current = " + event.getNewCurrent());
 			rv.handlePowerChange(neighbour.getLocation(), event.getNewCurrent());
 		}
 	}
@@ -307,8 +314,8 @@ public class SMSRedstoneView extends SMSView {
 		
 		if (attribute.equals(POWERON) || attribute.equals(POWEROFF) || attribute.equals(POWERTOGGLE)) {
 			if (!newVal.isEmpty()) {
-				if (getMenu().indexOfItem(newVal) == -1) {
-					throw new SMSException("Menu " + getMenu().getName() + " does not contain the item '" + newVal + "'");
+				if (getNativeMenu().indexOfItem(newVal) == -1) {
+					throw new SMSException("Menu " + getNativeMenu().getName() + " does not contain the item '" + newVal + "'");
 				}
 			}
 		}

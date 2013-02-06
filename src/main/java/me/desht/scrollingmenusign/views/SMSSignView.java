@@ -76,26 +76,45 @@ public class SMSSignView extends SMSGlobalScrollableView {
 	 * @see me.desht.scrollingmenusign.views.SMSScrollableView#update(java.util.Observable, java.lang.Object)
 	 */
 	@Override
-	public void update(Observable menu, Object arg1) {
+	public void update(Observable menu, Object arg) {
+		super.update(menu, arg);
+
+		switch ((SMSMenuAction) arg) {
+		case REPAINT: case SCROLLED:
+			repaintAll();
+			break;
+		default:
+			break;
+		}
+	}
+
+	@Override
+	public void erase() {
 		Sign sign = getSign();
 		if (sign == null)
 			return;
-		if (!(menu instanceof SMSMenu))
-			return;
-
-		String[] lines = buildSignText(getLastScrollPos());
-		for (int i = 0; i < lines.length; i++) {
-			sign.setLine(i, lines[i]);
+		for (int i = 0; i < 4; i++) {
+			sign.setLine(i, "");
 		}
-		
 		sign.update();
-		setDirty(false);
+	}
+
+	private void repaintAll() {
+		Sign sign = getSign();
+		if (sign != null) {
+			String[] lines = buildSignText(getScrollPos());
+			for (int i = 0; i < lines.length; i++) {
+				sign.setLine(i, lines[i]);
+			}
+			sign.update();
+			setDirty(false);
+		}
 	}
 
 	private String[] buildSignText(int scrollPos) {
 		String[] res = new String[4];
 
-		List<String> title = splitTitle();
+		List<String> title = splitTitle(null);
 		
 		// first line of the sign is the menu title
 		for (int i = 0; i < title.size(); i++) {
@@ -118,32 +137,32 @@ public class SMSSignView extends SMSGlobalScrollableView {
 	}
 
 	private String getLine2Item(int pos) {
-		if (getMenu().getItemCount() < 3)
+		if (getActiveMenuItemCount(null) < 3)
 			return "";
 			
 		int prevPos = pos - 1;
 		if (prevPos < 1) {
-			prevPos = getMenu().getItemCount();
+			prevPos = getActiveMenuItemCount(null);
 		}
-		return getItemLabel(prevPos);
+		return getActiveItemLabel(null, prevPos);
 	}
 	
 	private String getLine3Item(int pos) {
-		if (getMenu().getItemCount() < 1) {
+		if (getActiveMenuItemCount(null) < 1) {
 			return "";
 		}
-		return getItemLabel(pos);
+		return getActiveItemLabel(null, pos);
 	}
 
 	private String getLine4Item(int pos) {
-		if (getMenu().getItemCount() < 2) 
+		if (getActiveMenuItemCount(null) < 2) 
 			return "";
 			
 		int nextPos = pos + 1;
-		if (nextPos > getMenu().getItemCount()) {
+		if (nextPos > getActiveMenuItemCount(null)) {
 			nextPos = 1;
 		}
-		return getItemLabel(nextPos);
+		return getActiveItemLabel(null, nextPos);
 	}
 	
 	private String makePrefix(String prefix, ViewJustification just) {
@@ -156,6 +175,8 @@ public class SMSSignView extends SMSGlobalScrollableView {
 			s = prefix + "%1$s"; break;
 		case RIGHT:
 			s = prefix + "%1$" + l + "s"; break;
+		default:
+			break;
 		}
 		return MiscUtil.parseColourSpec(s);
 	}
@@ -179,15 +200,10 @@ public class SMSSignView extends SMSGlobalScrollableView {
 
 	/**
 	 * Erase the text for this view's sign, leaving it blank.
+	 * @deprecated use {@link erase()}
 	 */
 	public void blankSign() {
-		Sign sign = getSign();
-		if (sign == null)
-			return;
-		for (int i = 0; i < 4; i++) {
-			sign.setLine(i, "");
-		}
-		sign.update();		
+		erase();
 	}
 
 	/**
@@ -216,15 +232,6 @@ public class SMSSignView extends SMSGlobalScrollableView {
 	}
 	public static SMSView addSignToMenu(SMSMenu menu, Location loc) throws SMSException {
 		return addSignToMenu(null, menu, loc);
-	}
-	
-	/* (non-Javadoc)
-	 * @see me.desht.scrollingmenusign.views.SMSView#deletePermanent()
-	 */
-	@Override
-	public void deletePermanent() {
-		blankSign();
-		super.deletePermanent();
 	}
 	
 	@Override

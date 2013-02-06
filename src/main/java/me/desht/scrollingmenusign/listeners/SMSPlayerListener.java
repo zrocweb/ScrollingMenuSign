@@ -9,6 +9,7 @@ import me.desht.scrollingmenusign.PopupBook;
 import me.desht.scrollingmenusign.SMSException;
 import me.desht.scrollingmenusign.SMSHandler;
 import me.desht.scrollingmenusign.SMSMenu;
+import me.desht.scrollingmenusign.SMSMenuItem;
 import me.desht.scrollingmenusign.ScrollingMenuSign;
 import me.desht.scrollingmenusign.enums.SMSMenuAction;
 import me.desht.scrollingmenusign.enums.SMSUserAction;
@@ -81,7 +82,9 @@ public class SMSPlayerListener extends SMSListenerBase {
 			SMSView view = SMSView.getTargetedView(player);
 			if (view == null)
 				return;
-			LogUtils.fine("player item held change event @ " + view.getName() + ", " + player.getName() + " did " + event.getPreviousSlot() + "->" + event.getNewSlot() + ", menu =" + view.getMenu().getName());
+			LogUtils.fine(String.format("PlayerItemHeldChangeEvent @ %s, %s did %d->%d, menu = %s",
+			                            view.getName(), player.getName(),
+			                            event.getPreviousSlot(), event.getNewSlot(), view.getNativeMenu().getName()));
 			SMSUserAction action = SMSUserAction.getAction(event);
 			if (action != null) {
 				action.execute(player, view);
@@ -184,7 +187,8 @@ public class SMSPlayerListener extends SMSListenerBase {
 			player.setItemInHand(popupBook.toItemStack());
 		} else if (mapView != null) {
 			// Holding an active map view
-			LogUtils.fine("player interact event @ map_" + mapView.getMapView().getId() + ", " + player.getName() + " did " + event.getAction() + ", menu=" + mapView.getMenu().getName());
+			LogUtils.fine("player interact event @ map_" + mapView.getMapView().getId() + ", " + player.getName() + " did " + event.getAction() +
+			              ", menu=" + mapView.getActiveMenu(player.getName()).getName());
 			Configuration cfg = plugin.getConfig();
 			if (block != null && block.getTypeId() == cfg.getInt("sms.maps.break_block_id")) {
 				// Hit the "break block" with active map - deactivate the map if it has a view on it
@@ -217,14 +221,15 @@ public class SMSPlayerListener extends SMSListenerBase {
 				tryToAddRedstoneOutput((SMSGlobalScrollableView) locView, player);
 			} else if (locView != null && locView instanceof SMSScrollableView) {
 				// There's an interactable view at the targeted block
-				LogUtils.fine("player interact event @ " + block.getLocation() + ", " + player.getName() + " did " + event.getAction() + ", menu=" + locView.getMenu().getName());
+				LogUtils.fine("player interact event @ " + block.getLocation() + ", " + player.getName() + " did " + event.getAction() +
+				              ", menu=" + locView.getActiveMenu(player.getName()).getName());
 				SMSUserAction action = SMSUserAction.getAction(event);
 				if (action != null) {
 					action.execute(player, locView);
 				}
 				if (event.getAction() == Action.LEFT_CLICK_BLOCK && player.getGameMode() == GameMode.CREATIVE) {
 					// left clicking a sign in creative mode even once will blank the sign
-					locView.update(locView.getMenu(), SMSMenuAction.REPAINT);
+					locView.update(locView.getActiveMenu(player.getName()), SMSMenuAction.REPAINT);
 				}
 			} else {
 				return false;
@@ -245,7 +250,7 @@ public class SMSPlayerListener extends SMSListenerBase {
 		PermissionUtils.requirePerms(player, "scrollingmenusign.use.inventory");
 		
 		boolean newView = false;
-		SMSMenu menu = view.getMenu();
+		SMSMenu menu = view.getActiveMenu(player.getName());
 		SMSView popView = SMSView.findView(menu, PoppableView.class);
 		if (popView == null) {
 			PermissionUtils.requirePerms(player, "scrollingmenusign.commands.sync");
@@ -319,7 +324,7 @@ public class SMSPlayerListener extends SMSListenerBase {
 		PermissionUtils.requirePerms(player, "scrollingmenusign.commands.sync");
 		PermissionUtils.requirePerms(player, "scrollingmenusign.use.map");
 		PermissionUtils.requirePerms(player, "scrollingmenusign.maps.toSign");
-		SMSMenu menu = mapView.getMenu();
+		SMSMenu menu = mapView.getActiveMenu(player.getName());
 		SMSView view = SMSSignView.addSignToMenu(menu, block.getLocation());
 		MiscUtil.statusMessage(player, String.format("Added new sign view &e%s&- @ &f%s&- to menu &e%s&-.",
 		                                             view.getName(), MiscUtil.formatLocation(block.getLocation()), menu.getName()));
@@ -341,7 +346,7 @@ public class SMSPlayerListener extends SMSListenerBase {
 			mapView.removeMapItemName(player.getItemInHand());
 			mapView.deletePermanent();
 			MiscUtil.statusMessage(player, String.format("Removed map view &e%s&- from menu &e%s&-.",
-			                                             mapView.getName(), mapView.getMenu().getName()));
+			                                             mapView.getName(), mapView.getActiveMenu(player.getName()).getName()));
 		}
 	}
 
@@ -365,11 +370,11 @@ public class SMSPlayerListener extends SMSListenerBase {
 			return;
 
 		short mapId = player.getItemInHand().getDurability();
-		SMSMapView mapView = SMSMapView.addMapToMenu(clickedView.getMenu(), mapId);
+		SMSMapView mapView = SMSMapView.addMapToMenu(clickedView.getActiveMenu(player.getName()), mapId);
 		mapView.setMapItemName(player.getItemInHand());
 
 		MiscUtil.statusMessage(player, String.format("Added new map view &e%s&- to menu &e%s&-.",
-		                                             mapView.getName(), mapView.getMenu().getName()));
+		                                             mapView.getName(), mapView.getActiveMenu(player.getName()).getName()));
 	}
 
 	/**
@@ -380,8 +385,10 @@ public class SMSPlayerListener extends SMSListenerBase {
 	 */
 	private void tryToAddRedstoneOutput(SMSGlobalScrollableView locView, Player player) {
 		PermissionUtils.requirePerms(player, "scrollingmenusign.create.switch");
-		String trigger = locView.getMenu().getItemAt(locView.getLastScrollPos()).getLabel();
+		SMSMenuItem item = locView.getActiveMenu(player.getName()).getItemAt(locView.getScrollPos());
+		if (item == null) return;
 		
+		String trigger = item.getLabel();
 		MiscUtil.statusMessage(player, "Place your lever or hit an existing lever to add it as a");
 		MiscUtil.statusMessage(player, String.format("  redstone output on view &e%s&- / &e%s&-.",
 		                                             locView.getName(), trigger));
