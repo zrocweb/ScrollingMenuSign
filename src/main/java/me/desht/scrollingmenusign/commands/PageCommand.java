@@ -2,15 +2,14 @@ package me.desht.scrollingmenusign.commands;
 
 import me.desht.dhutils.MessagePager;
 import me.desht.dhutils.MiscUtil;
-import me.desht.dhutils.commands.AbstractCommand;
 
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.Plugin;
 
-public class PageCommand extends AbstractCommand {
+public class PageCommand extends SMSAbstractCommand {
 
 	public PageCommand() {
-		super("sms p", 0, 1);
+		super("sms page", 0, 1);
 		setUsage("/sms page [<page-number>|<next>|<prev>]");
 	}
 
@@ -32,7 +31,7 @@ public class PageCommand extends AbstractCommand {
 				MiscUtil.errorMessage(sender, "Invalid page number " + args[1]);
 			}
 		}
-		
+
 		return true;
 	}
 

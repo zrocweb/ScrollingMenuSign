@@ -1,5 +1,4 @@
 sms:
-    menuitem_separator: '|'
     actions:
         leftclick:
             normal: execute
@@ -27,13 +26,15 @@ sms:
     item_justify: left
     title_justify: center
     max_title_lines: 1
-    ignore_view_ownership: true
     elevation:
         nodes: []
         grant_op: false
     inv_view:
         default_icon: stone
     maps:
+        font: SansSerif
+        fontsize: 9
+        show_tooltips: true
         break_block_id: 0
         transfer:
             to_sign: true
@@ -42,14 +43,13 @@ sms:
         double_click: false
         list_alpha: 0.5
         list_background: ccc072
-        show_command_text: true
+        show_tooltips: true
     redstonecontrol:
         execute: false
         scrollup: true
         scrolldown: true
     redstoneoutput:
-        pulseticks: 20
-    persistent_user_vars: false
+        pulseticks: 10
     resource_base_url: ''
     log_commands: false
     command_log_file: ''
@@ -58,6 +58,9 @@ sms:
     autocreate_views: true
     pager:
         lines: 0
-    back_item:
-        label: BACK
-        material: 324
+    submenus:
+        back_item:
+            label: '&l<- BACK'
+            material: 324
+        title_prefix: '->'
+    coloured_console: true

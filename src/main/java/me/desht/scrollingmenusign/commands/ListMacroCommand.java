@@ -1,24 +1,25 @@
 package me.desht.scrollingmenusign.commands;
 
-import me.desht.scrollingmenusign.SMSMacro;
+import java.util.List;
+
 import me.desht.dhutils.MessagePager;
-import me.desht.dhutils.commands.AbstractCommand;
+import me.desht.scrollingmenusign.SMSMacro;
 
 import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.Plugin;
 
-public class ListMacroCommand extends AbstractCommand {
+public class ListMacroCommand extends SMSAbstractCommand {
 
 	public ListMacroCommand() {
-		super("sms m l", 0, 1);
+		super("sms macro list", 0, 1);
 		setPermissionNode("scrollingmenusign.commands.macro");
 		setUsage("/sms macro list [<macro-name>]");
 	}
 
 	@Override
 	public boolean execute(Plugin plugin, CommandSender sender, String[] args) {
-		MessagePager pager = MessagePager.getPager(sender).clear();
+		MessagePager pager = MessagePager.getPager(sender).clear().setParseColours(true);
 
 		if (args.length == 0) {
 			pager.add("&e" + SMSMacro.getMacros().size() + " macros:");
@@ -34,8 +35,18 @@ public class ListMacroCommand extends AbstractCommand {
 			}
 		}
 		pager.showPage();
-		
+
 		return true;
 	}
 
+	@Override
+	public List<String> onTabComplete(Plugin plugin, CommandSender sender, String[] args) {
+		switch (args.length) {
+		case 1:
+			return getMacroCompletions(sender, args[0]);
+		default:
+			showUsage(sender);
+			return noCompletions(sender);
+		}
+	}
 }

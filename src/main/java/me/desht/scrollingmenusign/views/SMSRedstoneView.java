@@ -19,6 +19,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.event.block.BlockRedstoneEvent;
 import org.bukkit.material.Attachable;
@@ -37,11 +38,11 @@ public class SMSRedstoneView extends SMSView {
 	public SMSRedstoneView(String name, SMSMenu menu) {
 		super(name, menu);
 
-		registerAttribute(POWERON, "");
-		registerAttribute(POWEROFF, "");
-		registerAttribute(POWERTOGGLE, "");
-		registerAttribute(PLAYERRADIUS, 0.0);
-		registerAttribute(AFFECTONLYNEAREST, true);
+		registerAttribute(POWERON, "", "Item to run when redstone power goes on");
+		registerAttribute(POWEROFF, "", "Item to run when redstone power goes off");
+		registerAttribute(POWERTOGGLE, "", "Item to run when redstone power changes");
+		registerAttribute(PLAYERRADIUS, 0.0, "Command will be run on players within this radius");
+		registerAttribute(AFFECTONLYNEAREST, true, "If true, command will only be run on nearest player");
 	}
 
 	public SMSRedstoneView(SMSMenu menu) {
@@ -57,11 +58,6 @@ public class SMSRedstoneView extends SMSView {
 	@Override
 	public void update(Observable menu, Object arg1) {
 		// A redstone view doesn't have any visual appearance to redraw
-	}
-
-	@Override
-	public void erase() {
-		// A redstone view doesn't have any visual appearance to erase
 	}
 
 	@Override
@@ -134,7 +130,7 @@ public class SMSRedstoneView extends SMSView {
 			return null;
 		}
 		radius *= radius;
-		
+
 		double minDist = Double.MAX_VALUE;
 		List<Player> res = new ArrayList<Player>();
 
@@ -160,7 +156,7 @@ public class SMSRedstoneView extends SMSView {
 				}
 			}
 		}
-		
+
 		return res;
 	}
 
@@ -226,14 +222,15 @@ public class SMSRedstoneView extends SMSView {
 	 * @param loc	The location for the view.
 	 * @throws SMSException if the location is not suitable for this view
 	 */
-	public static SMSView addRedstoneViewToMenu(String viewName, SMSMenu menu, Location loc) throws SMSException {
+	public static SMSView addRedstoneViewToMenu(String viewName, SMSMenu menu, Location loc, CommandSender owner) throws SMSException {
 		SMSView view = new SMSRedstoneView(viewName, menu);
 		view.addLocation(loc);
 		view.register();
+		view.setAttribute(OWNER, view.getOwnerName(owner));
 		return view;
 	}
-	public static SMSView addRedstoneViewToMenu(SMSMenu menu, Location loc) throws SMSException {
-		return addRedstoneViewToMenu(null, menu, loc);
+	public static SMSView addRedstoneViewToMenu(SMSMenu menu, Location loc, CommandSender owner) throws SMSException {
+		return addRedstoneViewToMenu(null, menu, loc, owner);
 	}
 
 	/**
@@ -304,17 +301,18 @@ public class SMSRedstoneView extends SMSView {
 			rv.handlePowerChange(neighbour.getLocation(), event.getNewCurrent());
 		}
 	}
-	
+
 	/* (non-Javadoc)
 	 * @see me.desht.scrollingmenusign.views.SMSView#onConfigurationValidate(me.desht.dhutils.ConfigurationManager, java.lang.String, java.lang.String)
 	 */
 	@Override
-	public void onConfigurationValidate(ConfigurationManager configurationManager, String attribute, String newVal) {
-		super.onConfigurationValidate(configurationManager, attribute, newVal);
-		
+	public void onConfigurationValidate(ConfigurationManager configurationManager, String attribute, Object oldVal, Object newVal) {
+		super.onConfigurationValidate(configurationManager, attribute, oldVal, newVal);
+
 		if (attribute.equals(POWERON) || attribute.equals(POWEROFF) || attribute.equals(POWERTOGGLE)) {
-			if (!newVal.isEmpty()) {
-				if (getNativeMenu().indexOfItem(newVal) == -1) {
+			String label = newVal.toString();
+			if (!label.isEmpty()) {
+				if (getNativeMenu().indexOfItem(label) == -1) {
 					throw new SMSException("Menu " + getNativeMenu().getName() + " does not contain the item '" + newVal + "'");
 				}
 			}

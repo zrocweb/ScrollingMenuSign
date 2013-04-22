@@ -2,10 +2,10 @@ package me.desht.scrollingmenusign.commands;
 
 import me.desht.dhutils.MiscUtil;
 import me.desht.dhutils.PermissionUtils;
-import me.desht.dhutils.commands.AbstractCommand;
 import me.desht.scrollingmenusign.SMSException;
 import me.desht.scrollingmenusign.SMSHandler;
 import me.desht.scrollingmenusign.SMSMenu;
+import me.desht.scrollingmenusign.SMSValidate;
 import me.desht.scrollingmenusign.ScrollingMenuSign;
 import me.desht.scrollingmenusign.views.SMSMapView;
 import me.desht.scrollingmenusign.views.SMSSignView;
@@ -17,10 +17,10 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
-public class CreateMenuCommand extends AbstractCommand {
+public class CreateMenuCommand extends SMSAbstractCommand {
 
 	public CreateMenuCommand() {
-		super("sms c", 2);
+		super("sms create", 2);
 		setPermissionNode("scrollingmenusign.commands.create");
 		setUsage(new String[] { 
 				"/sms create <menu> <title>",
@@ -35,18 +35,16 @@ public class CreateMenuCommand extends AbstractCommand {
 
 		ScrollingMenuSign smsPlugin = (ScrollingMenuSign) plugin;
 		SMSHandler handler = smsPlugin.getHandler();
-		
-		if (handler.checkMenu(menuName)) {
-			throw new SMSException("A menu called '" + menuName + "' already exists.");
-		}
+
+		SMSValidate.isFalse(handler.checkMenu(menuName), "A menu called '" + menuName + "' already exists.");
 
 		Location signLoc = null;
 		short mapId = -1;
-		String owner = "&console";	// dummy owner if menu created from console
+		String owner = null;
 
-		boolean autoCreate = ScrollingMenuSign.getInstance().getConfig().getBoolean("sms.autocreate_views");
-		
-		if (autoCreate && sender instanceof Player) {
+		boolean autoCreateView = ScrollingMenuSign.getInstance().getConfig().getBoolean("sms.autocreate_views");
+
+		if (autoCreateView && sender instanceof Player) {
 			Player player = (Player) sender;
 			owner = sender.getName();
 			Block b = null;
@@ -54,7 +52,7 @@ public class CreateMenuCommand extends AbstractCommand {
 				b = player.getTargetBlock(null, ScrollingMenuSign.BLOCK_TARGET_DIST);
 			} catch (IllegalStateException e) {
 				// ignore
-			}				
+			}
 			if (b != null && (b.getType() == Material.SIGN_POST || b.getType() == Material.WALL_SIGN)) {
 				if (handler.getMenuNameAt(b.getLocation()) == null) {
 					PermissionUtils.requirePerms(sender, "scrollingmenusign.use.sign");
@@ -62,7 +60,7 @@ public class CreateMenuCommand extends AbstractCommand {
 				}
 			} else if (player.getItemInHand().getType() == Material.MAP) {
 				short id = player.getItemInHand().getDurability();
-				if (!SMSMapView.checkForMapId(id)) {
+				if (!SMSMapView.checkForMapId(id) && !SMSMapView.usedByOtherPlugin(id)) {
 					PermissionUtils.requirePerms(sender, "scrollingmenusign.use.map");
 					mapId = id;
 				}
@@ -73,10 +71,10 @@ public class CreateMenuCommand extends AbstractCommand {
 		SMSMenu menu = handler.createMenu(menuName, menuTitle, owner);
 
 		if (signLoc != null) {
-			SMSSignView.addSignToMenu(menu, signLoc);
+			SMSSignView.addSignToMenu(menu, signLoc, sender);
 			MiscUtil.statusMessage(sender, "Created new menu &e" + menuName + "&- with sign view @ &f" + MiscUtil.formatLocation(signLoc));
 		} else if (mapId >= 0) {
-			SMSMapView mapView = SMSMapView.addMapToMenu(menu, mapId);
+			SMSMapView mapView = SMSMapView.addMapToMenu(menu, mapId, sender);
 			MiscUtil.statusMessage(sender, "Created new menu &e" + menuName + "&- with map view &fmap_" + mapId);
 			Player player = (Player) sender;
 			mapView.setMapItemName(player.getItemInHand());

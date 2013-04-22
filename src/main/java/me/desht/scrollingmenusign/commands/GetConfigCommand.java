@@ -6,20 +6,19 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import me.desht.scrollingmenusign.ScrollingMenuSign;
 import me.desht.dhutils.MessagePager;
 import me.desht.dhutils.MiscUtil;
-import me.desht.dhutils.commands.AbstractCommand;
+import me.desht.scrollingmenusign.ScrollingMenuSign;
 
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.Configuration;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.plugin.Plugin;
 
-public class GetConfigCommand extends AbstractCommand {
+public class GetConfigCommand extends SMSAbstractCommand {
 
 	public GetConfigCommand() {
-		super("sms ge", 0, 1);
+		super("sms getcfg", 0, 1);
 		setPermissionNode("scrollingmenusign.commands.getcfg");
 		setUsage("/sms getcfg [<key>]");
 	}
@@ -28,15 +27,13 @@ public class GetConfigCommand extends AbstractCommand {
 	public boolean execute(Plugin plugin, CommandSender sender, String[] args) {
 		List<String> lines = getPluginConfiguration(args.length >= 1 ? args[0] : null);
 		if (lines.size() > 1) {
-			MessagePager pager = MessagePager.getPager(sender).clear();
+			MessagePager pager = MessagePager.getPager(sender).clear().setParseColours(true);
 			for (String line : lines) {
 				pager.add(line);
 			}
-			pager.showPage();		
+			pager.showPage();
 		} else if (lines.size() == 1) {
 			MiscUtil.statusMessage(sender, lines.get(0));
-		} else {
-			MiscUtil.errorMessage(sender, "No such config key: " + args[0]); //$NON-NLS-1$	
 		}
 		return true;
 	}
@@ -72,5 +69,15 @@ public class GetConfigCommand extends AbstractCommand {
 		}
 		Collections.sort(res);
 		return res;
+	}
+
+	@Override
+	public List<String> onTabComplete(Plugin plugin, CommandSender sender, String[] args) {
+		switch (args.length) {
+		case 1:
+			return getConfigCompletions(sender, ScrollingMenuSign.getInstance().getConfig().getConfigurationSection("sms"), args[0]);
+		default:
+			return noCompletions(sender);
+		}
 	}
 }

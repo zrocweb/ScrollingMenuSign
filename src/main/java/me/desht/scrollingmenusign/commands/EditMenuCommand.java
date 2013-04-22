@@ -3,10 +3,10 @@ package me.desht.scrollingmenusign.commands;
 import java.util.List;
 
 import me.desht.dhutils.MiscUtil;
-import me.desht.dhutils.commands.AbstractCommand;
 import me.desht.scrollingmenusign.SMSException;
 import me.desht.scrollingmenusign.SMSMenu;
 import me.desht.scrollingmenusign.SMSMenuItem;
+import me.desht.scrollingmenusign.SMSValidate;
 import me.desht.scrollingmenusign.enums.SMSMenuAction;
 import me.desht.scrollingmenusign.parser.CommandParser;
 
@@ -14,10 +14,10 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
-public class EditMenuCommand extends AbstractCommand {
+public class EditMenuCommand extends SMSAbstractCommand {
 
 	public EditMenuCommand() {
-		super("sms ed", 3);
+		super("sms edit", 3);
 		setPermissionNode("scrollingmenusign.commands.edit");
 		setUsage(new String[] {
 				"/sms edit <menu-name> @<pos> <replacements...>",
@@ -36,7 +36,8 @@ public class EditMenuCommand extends AbstractCommand {
 
 	@Override
 	public boolean execute(Plugin plugin, CommandSender sender, String[] args) {
-		SMSMenu menu = SMSMenu.getMenu(args[0]);
+		SMSMenu menu = getMenu(sender, args[0]);
+		menu.ensureAllowedToModify(sender);
 
 		int pos = 0;
 		if (args[1].startsWith("@")) {
@@ -57,34 +58,53 @@ public class EditMenuCommand extends AbstractCommand {
 		List<String> lore = currentItem.getLoreAsList();
 		if (hasOption("lore")) {
 			String l = getStringOption("lore");
+			String l1;
 			if (l.startsWith("+") && l.length() > 1) {
-				lore.add(l.substring(1));
+				l1 = l.substring(1);
 			} else {
 				lore.clear();
-				if (!l.isEmpty()) { lore.add(l); }
+				l1 = l;
+			}
+			if (!l1.isEmpty()) {
+				for (String s : l1.split("\\\\\\\\")) {
+					lore.add(s);
+				}
 			}
 		}
-		
+
 		if (!command.isEmpty() && sender instanceof Player && !new CommandParser().verifyCreationPerms((Player) sender, command)) {
 			throw new SMSException("You do not have permission to add that kind of command.");
 		}
 
 		SMSMenuItem newItem = new SMSMenuItem(menu, label, command, message, iconMat, lore.toArray(new String[lore.size()]));
+		newItem.setUseLimits(currentItem.getUseLimits());
+
 		if (hasOption("move")) {
 			int newPos = getIntOption("move");
-			if (newPos < 1 || newPos > menu.getItemCount()) {
-				throw new SMSException("Invalid position for -move: " + newPos);
-			}
+			SMSValidate.isTrue(newPos >= 1 && newPos <= menu.getItemCount(), "Invalid position for -move: " + newPos);
 			menu.removeItem(pos);
 			menu.insertItem(newPos, newItem);
 			MiscUtil.statusMessage(sender, "Menu item &f" + label + "&- edited in &e" + menu.getName() + "&-, new position &e" + newPos);
 		} else {
 			menu.replaceItem(pos, newItem);
 			MiscUtil.statusMessage(sender, "Menu item &f" + label + "&- edited in &e" + menu.getName() + "&-, position &e" + pos);		
-		} 
+		}
 		menu.notifyObservers(SMSMenuAction.REPAINT);
 
 		return true;
 	}
 
+	@Override
+	public List<String> onTabComplete(Plugin plugin, CommandSender sender, String[] args) {
+		switch (args.length) {
+		case 1:
+			return getMenuCompletions(plugin, sender, args[0]);
+		case 2:
+			SMSMenu menu = getMenu(sender, args[0]);
+			return getMenuItemCompletions(sender, menu, args[1]);
+		default:
+			showUsage(sender);
+			return noCompletions(sender);
+		}
+	}
 }

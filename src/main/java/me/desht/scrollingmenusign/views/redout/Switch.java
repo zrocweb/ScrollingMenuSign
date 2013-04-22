@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.commons.lang.Validate;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -18,6 +19,7 @@ import org.bukkit.material.Redstone;
 
 import me.desht.scrollingmenusign.SMSException;
 import me.desht.dhutils.LogUtils;
+import me.desht.dhutils.MiscUtil;
 import me.desht.dhutils.PersistableLocation;
 import me.desht.scrollingmenusign.views.SMSGlobalScrollableView;
 import me.desht.scrollingmenusign.views.SMSView;
@@ -45,14 +47,12 @@ public class Switch implements Comparable<Switch> {
 	public Switch(SMSGlobalScrollableView view, ConfigurationSection conf) throws SMSException {
 		String worldName = conf.getString("world");
 		World w = Bukkit.getWorld(worldName);
-		if (w == null) {
-			// throw an exception - the view thawing code can defer the loading
-			throw new IllegalArgumentException("World not available");
-		} 
+		Validate.notNull(w, "World not available");
+
 		this.view = view;
 		Location loc = new Location(w, conf.getInt("x"), conf.getInt("y"), conf.getInt("z"));
 		this.location = new PersistableLocation(loc);
-		this.trigger = conf.getString("trigger");
+		this.trigger = MiscUtil.parseColourSpec(conf.getString("trigger"));
 		this.name = makeUniqueName(view.getName());
 
 		initCommon();
@@ -189,7 +189,7 @@ public class Switch implements Comparable<Switch> {
 	public Map<String,Object> freeze() {
 		Map<String, Object> map = new HashMap<String, Object>();
 
-		map.put("trigger", trigger);
+		map.put("trigger", MiscUtil.unParseColourSpec(trigger));
 		map.put("world", location.getWorldName());
 		map.put("x", location.getX());
 		map.put("y", location.getY());
