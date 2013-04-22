@@ -1,10 +1,12 @@
 package me.desht.scrollingmenusign.commands;
 
+import java.util.List;
+
 import me.desht.dhutils.MiscUtil;
 import me.desht.dhutils.PermissionUtils;
-import me.desht.dhutils.commands.AbstractCommand;
 import me.desht.scrollingmenusign.SMSException;
 import me.desht.scrollingmenusign.SMSMenu;
+import me.desht.scrollingmenusign.SMSValidate;
 import me.desht.scrollingmenusign.ScrollingMenuSign;
 import me.desht.scrollingmenusign.expector.ExpectViewCreation;
 import me.desht.scrollingmenusign.views.SMSInventoryView;
@@ -22,10 +24,10 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
-public class AddViewCommand extends AbstractCommand {
+public class AddViewCommand extends SMSAbstractCommand {
 
 	public AddViewCommand() {
-		super("sms sy", 1);
+		super("sms sync", 1);
 		setPermissionNode("scrollingmenusign.commands.sync");
 		setUsage(new String[] {
 				"/sms sync <menu-name>",
@@ -43,7 +45,7 @@ public class AddViewCommand extends AbstractCommand {
 	@Override
 	public boolean execute(Plugin plugin, CommandSender sender, String[] args) throws SMSException {
 		ScrollingMenuSign smsPlugin = (ScrollingMenuSign) plugin;
-		
+
 		SMSView view = null;
 		SMSMenu menu = SMSMenu.getMenu(args[0]);
 		String viewName = getStringOption("viewname");
@@ -51,7 +53,7 @@ public class AddViewCommand extends AbstractCommand {
 
 		if (hasOption("spout")) {		// spout view
 			if (smsPlugin.isSpoutEnabled())
-				view = SMSSpoutView.addSpoutViewToMenu(viewName, menu);
+				view = SMSSpoutView.addSpoutViewToMenu(viewName, menu, sender);
 			else
 				throw new SMSException("Server is not Spout-enabled");
 		} else if (hasOption("sign")) {			// sign view
@@ -59,23 +61,23 @@ public class AddViewCommand extends AbstractCommand {
 				interactiveCreation(sender, viewName, menu, "sign");
 				return true;
 			} else {
-				view = SMSSignView.addSignToMenu(viewName, menu, loc);
+				view = SMSSignView.addSignToMenu(viewName, menu, loc, sender);
 			}
-		} else if (hasOption("redstone")) {	
+		} else if (hasOption("redstone")) {
 			if (loc == null) {
 				interactiveCreation(sender, viewName, menu, "redstone");
 				return true;
 			} else {
-				view = SMSRedstoneView.addRedstoneViewToMenu(viewName, menu, loc);
+				view = SMSRedstoneView.addRedstoneViewToMenu(viewName, menu, loc, sender);
 			}
 		} else if (hasOption("inventory") || hasOption("inv")) {
-			view = SMSInventoryView.addInventoryViewToMenu(viewName, menu);
+			view = SMSInventoryView.addInventoryViewToMenu(viewName, menu, sender);
 		} else if (hasOption("multi") && loc != null) { 	// multi-sign view
-			view = SMSMultiSignView.addSignToMenu(viewName, menu, loc);
+			view = SMSMultiSignView.addSignToMenu(viewName, menu, loc, sender);
 		} else if (hasOption("map")) {	// map view
 			try {
 				short mapId = (short) getIntOption("map");
-				view = SMSMapView.addMapToMenu(viewName, menu, mapId);
+				view = SMSMapView.addMapToMenu(viewName, menu, mapId, sender);
 			} catch (NumberFormatException e) {
 				throw new SMSException(e.getMessage());
 			}
@@ -90,15 +92,15 @@ public class AddViewCommand extends AbstractCommand {
 			if (player.getItemInHand().getType() == Material.MAP) {		// map view?
 				PermissionUtils.requirePerms(sender, "scrollingmenusign.use.map");
 				short mapId = player.getItemInHand().getDurability();
-				view = SMSMapView.addMapToMenu(viewName, menu, mapId);
+				view = SMSMapView.addMapToMenu(viewName, menu, mapId, sender);
 				((SMSMapView) view).setMapItemName(player.getItemInHand());
 			} else {
 				try {
 					Block b = player.getTargetBlock(null, ScrollingMenuSign.BLOCK_TARGET_DIST);		// sign view ?
 					if (hasOption("multi") && b.getType() == Material.WALL_SIGN) {
-						view = SMSMultiSignView.addSignToMenu(viewName, menu, b.getLocation());
+						view = SMSMultiSignView.addSignToMenu(viewName, menu, b.getLocation(), sender);
 					} else if (b.getType() == Material.WALL_SIGN || b.getType() == Material.SIGN_POST) {
-						view = SMSSignView.addSignToMenu(viewName, menu, b.getLocation());
+						view = SMSSignView.addSignToMenu(viewName, menu, b.getLocation(), sender);
 					}
 				} catch (IllegalStateException e) {
 					// ignore
@@ -106,14 +108,20 @@ public class AddViewCommand extends AbstractCommand {
 			}
 		}
 
-		if (view != null) {
-			MiscUtil.statusMessage(sender, String.format("Added &9%s&- view &e%s&- to menu &e%s&-.",
-			                                             view.getType(), view.getName(), menu.getName()));
-		} else {
-			throw new SMSException("Found nothing suitable to add as a menu view");
-		}
-
+		SMSValidate.notNull(view, "Found nothing suitable to add as a menu view");
+		MiscUtil.statusMessage(sender, String.format("Added &9%s&- view &e%s&- to menu &e%s&-.",
+		                                             view.getType(), view.getName(), menu.getName()));
 		return true;
+	}
+
+	@Override
+	public List<String> onTabComplete(Plugin plugin, CommandSender sender, String[] args) {
+		if (args.length == 1) {
+			return getMenuCompletions(plugin, sender, args[0]);
+		} else {
+			showUsage(sender);
+			return noCompletions(sender);
+		}
 	}
 
 	private void interactiveCreation(CommandSender sender, String viewName, SMSMenu menu, String viewType) {

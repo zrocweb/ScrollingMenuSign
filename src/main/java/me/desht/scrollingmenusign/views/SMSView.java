@@ -29,27 +29,31 @@ import me.desht.dhutils.MiscUtil;
 import me.desht.dhutils.PermissionUtils;
 import me.desht.dhutils.PersistableLocation;
 import me.desht.scrollingmenusign.DirectoryStructure;
+import me.desht.scrollingmenusign.PopupBook;
 import me.desht.scrollingmenusign.SMSException;
 import me.desht.scrollingmenusign.SMSMenu;
 import me.desht.scrollingmenusign.SMSMenuItem;
 import me.desht.scrollingmenusign.SMSPersistable;
 import me.desht.scrollingmenusign.SMSPersistence;
+import me.desht.scrollingmenusign.SMSValidate;
 import me.desht.scrollingmenusign.ScrollingMenuSign;
+import me.desht.scrollingmenusign.enums.SMSAccessRights;
 import me.desht.scrollingmenusign.enums.SMSMenuAction;
 import me.desht.scrollingmenusign.enums.SMSUserAction;
 import me.desht.scrollingmenusign.enums.ViewJustification;
 
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Vector;
 
 /**
- * @author des
- *
+ * Represents a base menu view from which all concrete views will inherit.
  */
 public abstract class SMSView implements Observer, SMSPersistable, ConfigurationListener {
 	// operations which were player-specific (active submenu, scroll position...)
@@ -60,13 +64,12 @@ public abstract class SMSView implements Observer, SMSPersistable, Configuration
 	public static final String OWNER = "owner";
 	public static final String ITEM_JUSTIFY = "item_justify";
 	public static final String TITLE_JUSTIFY = "title_justify";
+	public static final String ACCESS = "access";
 
 	// map view name to view object for registered views
 	private static final Map<String, SMSView> allViewNames = new HashMap<String, SMSView>();
 	// map (persistable - no World reference) location to view object for registered views
 	private static final Map<PersistableLocation, SMSView> allViewLocations = new HashMap<PersistableLocation, SMSView>();
-	// track the number we append to each new view name
-	private static final Map<String,Integer> viewIdx = new HashMap<String, Integer>();
 
 	private final SMSMenu menu;
 	private final Set<PersistableLocation> locations = new HashSet<PersistableLocation>();
@@ -78,6 +81,7 @@ public abstract class SMSView implements Observer, SMSPersistable, Configuration
 	private boolean autosave;
 	private boolean dirty;
 	private int maxLocations;
+
 	// we can't use a Set here, since there are three possible values: 1) dirty, 2) clean, 3) unknown
 	private final Map<String,Boolean> dirtyPlayers = new HashMap<String,Boolean>();
 	// map a world name (which hasn't been loaded yet) to a list of x,y,z positions
@@ -89,11 +93,6 @@ public abstract class SMSView implements Observer, SMSPersistable, Configuration
 	 * @return	The type of view this is.
 	 */
 	public abstract String getType();
-
-	/**
-	 * Erase the view's contents and perform any housekeeping; called when it's about to be deleted.
-	 */
-	public abstract void erase();
 
 	public SMSView(SMSMenu menu) {
 		this(null, menu);
@@ -108,32 +107,25 @@ public abstract class SMSView implements Observer, SMSPersistable, Configuration
 		this.name = name;
 		this.menu = menu;
 		this.dirty = true;
-		this.autosave = ScrollingMenuSign.getInstance().getConfig().getBoolean("sms.autosave", true);
+		this.autosave = true;
 		this.attributes = new AttributeCollection(this);
 		this.variables = new HashMap<String, String>();
 		this.maxLocations = 1;
 		this.menuStack = new HashMap<String, MenuStack>();
 
-		registerAttribute(OWNER, "");
-		registerAttribute(TITLE_JUSTIFY, ViewJustification.DEFAULT);
-		registerAttribute(ITEM_JUSTIFY, ViewJustification.DEFAULT);
+		attributes.registerAttribute(OWNER, ScrollingMenuSign.CONSOLE_OWNER, "Player who owns this view");
+		attributes.registerAttribute(TITLE_JUSTIFY, ViewJustification.DEFAULT, "Horizontal title positioning");
+		attributes.registerAttribute(ITEM_JUSTIFY, ViewJustification.DEFAULT, "Horizontal item positioning");
+		attributes.registerAttribute(ACCESS, SMSAccessRights.ANY, "Who may use this view");
 	}
 
 	private String makeUniqueName(String base) {
-		Integer idx;
-		if (viewIdx.containsKey(base)) {
-			idx = viewIdx.get(base);
-		} else {
-			idx = 1;
-			viewIdx.put(base, 1);
-		}
-
+		int idx = 1;
 		String s = String.format("%s-%d", base, idx);
 		while (SMSView.checkForView(s)) {
 			idx++;
 			s = String.format("%s-%d", base, idx);
 		}
-		viewIdx.put(base, idx + 1);
 		return s;
 	}
 
@@ -179,7 +171,7 @@ public abstract class SMSView implements Observer, SMSPersistable, Configuration
 	 * @see me.desht.scrollingmenusign.Freezable#getName()
 	 */
 	public String getName() {
-		return name;	
+		return name;
 	}
 
 	/**
@@ -207,7 +199,7 @@ public abstract class SMSView implements Observer, SMSPersistable, Configuration
 	 * Get the player context for operations such as view scrolling, active submenu etc.  For
 	 * views which have a per-player context (e.g. maps), this is just the player name. For views
 	 * with a global context (e.g. signs), a global pseudo-player handle can be used.
-	 * 
+	 *<p>
 	 * Subclasses can override this as needed.
 	 * 
 	 * @param playerName
@@ -293,13 +285,13 @@ public abstract class SMSView implements Observer, SMSPersistable, Configuration
 		playerName = getPlayerContext(playerName);
 
 		SMSMenu activeMenu = getActiveMenu(playerName);
-		String prefix = activeMenu == getNativeMenu() ? "" : "\u21b3";	// TODO configurable
+		String prefix = activeMenu == getNativeMenu() ? "" : ScrollingMenuSign.getInstance().getConfig().getString("sms.submenus.title_prefix");
 		return prefix + activeMenu.getTitle();
 	}
 
 	/**
 	 * Get the number of items in the given player's currently active menu.  Note that for non-native menus,
-	 * this will be one greater than the actual menu size, because a synthetic "BACK" button will be added.
+	 * this will be one greater than the actual menu size, because a synthetic "BACK" button is added.
 	 * 
 	 * @param playerName
 	 * @return
@@ -325,17 +317,18 @@ public abstract class SMSView implements Observer, SMSPersistable, Configuration
 
 		SMSMenu activeMenu = getActiveMenu(playerName);
 		if (activeMenu != getNativeMenu() && pos == activeMenu.getItemCount() + 1) {
-			String label = ScrollingMenuSign.getInstance().getConfig().getString("sms.back_item.label", "BACK");
-			String mat = ScrollingMenuSign.getInstance().getConfig().getString("sms.back_item.material", "irondoor");
-			return new SMSMenuItem(activeMenu, ChatColor.BOLD + "\u21e6 " + label, "BACK", "", mat);
+			String label = ScrollingMenuSign.getInstance().getConfig().getString("sms.submenus.back_item.label", "&l<- BACK");
+			String mat = ScrollingMenuSign.getInstance().getConfig().getString("sms.submenus.back_item.material", "irondoor");
+			return new SMSMenuItem(activeMenu, MiscUtil.parseColourSpec(label), "BACK", "", mat);
 		} else {
 			return activeMenu.getItemAt(pos);
 		}
 	}
 
 	/**
-	 * Get the label for the menu item at the given position for the given player's currently active menu.
-	 * 
+	 * Get the label for the menu item at the given position for the given player's currently active menu.  View variable
+	 * substitution has been performed on the returned label.
+	 *
 	 * @param playerName
 	 * @param pos
 	 * @return
@@ -350,15 +343,13 @@ public abstract class SMSView implements Observer, SMSPersistable, Configuration
 	}
 
 	/**
-	 * Set an arbitrary string of tagged data on this view
+	 * Set an arbitrary string of tagged data on this view.
 	 * 
 	 * @param key	the variable name (must contain only alphanumeric or underscore)
 	 * @param val	the variable value (may contain any character)
 	 */
 	public void setVariable(String key, String val) {
-		if (!key.matches("[A-Za-z0-9_]+")) {
-			throw new SMSException("Invalid variable name: " + key);
-		}
+		SMSValidate.isTrue(key.matches("[A-Za-z0-9_]+"), "Invalid variable name: " + key);
 		if (val == null) {
 			variables.remove(key);
 		} else {
@@ -373,12 +364,8 @@ public abstract class SMSView implements Observer, SMSPersistable, Configuration
 	 * @return	the variable value
 	 */
 	public String getVariable(String key) {
-		if (!key.matches("[A-Za-z0-9_]+")) {
-			throw new SMSException("Invalid variable name: " + key);
-		}
-		if (!variables.containsKey(key)) {
-			throw new SMSException("View " + getName() + " has no variable: " + key);
-		}
+		SMSValidate.isTrue(key.matches("[A-Za-z0-9_]+"), "Invalid variable name: " + key);
+		SMSValidate.isTrue(variables.containsKey(key), "View " + getName() + " has no variable: " + key);
 		return variables.get(key);
 	}
 
@@ -488,11 +475,24 @@ public abstract class SMSView implements Observer, SMSPersistable, Configuration
 				throw new SMSException("invalid location in view " + getName() + " (corrupted file?)");
 			}
 		}
-		for (String k : node.getKeys(false)) {
-			if (!node.isConfigurationSection(k) && attributes.hasAttribute(k)) {
-				setAttribute(k, node.getString(k));
+
+		// temporarily disable validation while attributes are loaded from saved data
+		for (String key : node.getKeys(false)) {
+			if (!node.isConfigurationSection(key) && attributes.hasAttribute(key)) {
+				String val = node.getString(key);
+				try {
+					setAttribute(key, val);
+				} catch (SMSException e) {
+					LogUtils.warning("View " + getName() + ": can't set " + key + "='" + val + "': " + e.getMessage());
+				}
 			}
 		}
+		// ensure view has an owner (pre-2.0, views did not)
+		String owner = getAttributeAsString(OWNER);
+		if (owner.isEmpty()) {
+			setAttribute(OWNER, getNativeMenu().getOwner());
+		}
+
 		ConfigurationSection vars = node.getConfigurationSection("vars");
 		if (vars != null) {
 			for (String k : vars.getKeys(false)) {
@@ -633,6 +633,10 @@ public abstract class SMSView implements Observer, SMSPersistable, Configuration
 		return maxLocations;
 	}
 
+	public String getOwnerName(CommandSender sender) {
+		return sender != null && sender instanceof Player ? sender.getName() : ScrollingMenuSign.CONSOLE_OWNER;
+	}
+
 	/**
 	 * Register a new location as being part of this view object
 	 * 
@@ -676,10 +680,6 @@ public abstract class SMSView implements Observer, SMSPersistable, Configuration
 			SMSPersistence.save(this);
 	}
 
-	public void screenClosed() {
-		// TODO Auto-generated method stub
-	}
-
 	/**
 	 * Register this view in the global view list and get it saved to disk.
 	 */
@@ -721,7 +721,7 @@ public abstract class SMSView implements Observer, SMSPersistable, Configuration
 	 * Permanently delete a view.  The view is deactivated and purged from persisted storage on disk.
 	 */
 	public void deletePermanent() {
-		erase();
+		onDeletion();
 		unregister();
 		SMSPersistence.unPersist(this);
 	}
@@ -844,15 +844,32 @@ public abstract class SMSView implements Observer, SMSPersistable, Configuration
 	 */
 	public static SMSView getTargetedView(Player player, boolean complain) {
 		SMSView v = null;
-		try {
-			Block b = player.getTargetBlock(null, ScrollingMenuSign.BLOCK_TARGET_DIST);
-			v =  getViewForLocation(b.getLocation());
-		} catch (IllegalStateException e) {
-			// the block iterator can throw this sometimes - we can ignore it
+
+		if (player.getItemInHand().getType() == Material.MAP) {
+			// map
+			v = SMSMapView.getHeldMapView(player);
 		}
+
+		if (v == null && PopupBook.holding(player)) {
+			// popup book (spout/inventory)
+			PopupBook book = PopupBook.get(player);
+			v = book.getView();
+		}
+
+		if (v == null) {
+			// targeted view (sign/multisign/redstone)
+			try {
+				Block b = player.getTargetBlock(null, ScrollingMenuSign.BLOCK_TARGET_DIST);
+				v =  getViewForLocation(b.getLocation());
+			} catch (IllegalStateException e) {
+				// the block iterator can throw this sometimes - we can ignore it
+			}
+		}
+
 		if (v == null && complain) {
 			throw new SMSException("You are not looking at a menu view.");
 		}
+
 		return v;
 	}
 
@@ -874,37 +891,59 @@ public abstract class SMSView implements Observer, SMSPersistable, Configuration
 	}
 
 	/**
-	 * Check if the given player is allowed to use this view.
-	 * 
+	 * Check if the given player has access right for this view.
+	 *
 	 * @param player	The player to check
 	 * @return	True if the player may use this view, false if not
 	 */
 	public boolean hasOwnerPermission(Player player) {
-		boolean ignore = ScrollingMenuSign.getInstance().getConfig().getBoolean("sms.ignore_view_ownership");
-		if (!ignore && !PermissionUtils.isAllowedTo(player, "scrollingmenusign.ignoreViewOwnership")) {
-			String owner = getAttributeAsString(OWNER);
-			if (owner != null && !owner.isEmpty() && !owner.equalsIgnoreCase(player.getName())) {
-				return false;
-			}
+		if (!getActiveMenu(player.getName()).hasOwnerPermission(player)) {
+			return false;
 		}
-		return true;
+		SMSAccessRights access = (SMSAccessRights) getAttribute(ACCESS);
+		return access.isAllowedToUse(player, getAttributeAsString(OWNER));
+	}
+
+	/**
+	 * Check if this view is owned by the given player.
+	 *
+	 * @param player
+	 * @return
+	 */
+	public boolean isOwnedBy(Player player) {
+		return player.getName().equalsIgnoreCase(getAttributeAsString(OWNER));
 	}
 
 	/**
 	 * Require that the given player is allowed to use this view, and throw a SMSException if not.
-	 * 
+	 *
 	 * @param player	The player to check
 	 */
-	public void ensureAllowedToUse(Player player) {
-		if (!hasOwnerPermission(player)) {
-			throw new SMSException("You do not own that view");
-		}
-
-		if (!PermissionUtils.isAllowedTo(player, "scrollingmenusign.use." + getType())) {
-			throw new SMSException("You don't have permission to use this type of view");
+	public void ensureAllowedToUse(CommandSender sender) {
+		if (sender instanceof Player) {
+			Player player = (Player) sender;
+			if (!hasOwnerPermission(player)) {
+				throw new SMSException("That view is private to someone else.");
+			}
+			if (!PermissionUtils.isAllowedTo(player, "scrollingmenusign.use." + getType())) {
+				throw new SMSException("You don't have permission to use that type of view.");
+			}
 		}
 	}
 
+	/**
+	 * Require that the given player is allowed to modify this view, and throw a SMSException if not.
+	 *
+	 * @param player	The player to check
+	 */
+	public void ensureAllowedToModify(CommandSender sender) {
+		if (sender instanceof Player) {
+			Player player = (Player) sender;
+			if (!PermissionUtils.isAllowedTo(player, "scrollingmenusign.edit.any") && !isOwnedBy(player)) {
+				throw new SMSException("That view is owned by someone else.");
+			}
+		}
+	}
 
 	/**
 	 * Instantiate a new view from a saved config file
@@ -923,7 +962,6 @@ public abstract class SMSView implements Observer, SMSPersistable, Configuration
 			viewName = node.getString("name");
 
 			Class<? extends SMSView> c = Class.forName(className).asSubclass(SMSView.class);
-			//			System.out.println("got class " + c.getName());
 			Constructor<? extends SMSView> ctor = c.getDeclaredConstructor(String.class, SMSMenu.class);
 			SMSView v = ctor.newInstance(viewName, SMSMenu.getMenu(node.getString("menu")));
 			v.thaw(node);
@@ -952,6 +990,10 @@ public abstract class SMSView implements Observer, SMSPersistable, Configuration
 	private static void loadError(String viewName, Throwable e) {
 		LogUtils.warning("Caught " + e.getClass().getName() + " while loading view " + viewName);
 		LogUtils.warning("  Exception message: " + e.getMessage());
+	}
+
+	protected void registerAttribute(String attr, Object def, String desc) {
+		attributes.registerAttribute(attr, def, desc);
 	}
 
 	protected void registerAttribute(String attr, Object def) {
@@ -994,7 +1036,7 @@ public abstract class SMSView implements Observer, SMSPersistable, Configuration
 		// avoid calling updates on views that haven't been registered yet (which will be the case
 		// when restoring saved views from disk)
 		if (allViewNames.containsKey(getName())) {
-			update(null, SMSMenuAction.REPAINT);	
+			update(null, SMSMenuAction.REPAINT);
 		}
 	}
 
@@ -1002,16 +1044,26 @@ public abstract class SMSView implements Observer, SMSPersistable, Configuration
 	 * @see me.desht.dhutils.ConfigurationListener#onConfigurationValidate(me.desht.dhutils.ConfigurationManager, java.lang.String, java.lang.String)
 	 */
 	@Override
-	public void onConfigurationValidate(ConfigurationManager configurationManager, String key, String val) {
-		// no validation here, override in subclasses
+	public void onConfigurationValidate(ConfigurationManager configurationManager, String key, Object oldVal, Object newVal) {
+		if (key.equals(OWNER)) {
+			if (newVal.toString().isEmpty()) {
+				throw new SMSException("Unowned views are not allowed");
+			}
+		} else if (key.equals(ACCESS)) {
+			SMSAccessRights access = (SMSAccessRights) newVal;
+			if (access != SMSAccessRights.ANY && getAttributeAsString(OWNER).equals(ScrollingMenuSign.CONSOLE_OWNER)) {
+				throw new SMSException("View must be owned by a player to change access control to " + access);
+			} else if (access == SMSAccessRights.GROUP && ScrollingMenuSign.permission == null) {
+				throw new SMSException("Cannot use GROUP access control (no permission group support available)");
+			}
+		}
 	}
 
-	/* (non-Javadoc)
-	 * @see me.desht.dhutils.ConfigurationListener#onConfigurationValidate(me.desht.dhutils.ConfigurationManager, java.lang.String, java.util.List)
+	/**
+	 * Erase the view's contents and perform any housekeeping; called when it's about to be deleted.
 	 */
-	@Override
-	public void onConfigurationValidate(ConfigurationManager configurationManager, String key, List<?> val) {
-		// no validation here, override in subclasses
+	public void onDeletion() {
+		// override in subclasses
 	}
 
 	/**

@@ -28,18 +28,21 @@ import me.desht.dhutils.PermissionUtils;
 import me.desht.scrollingmenusign.DirectoryStructure;
 import me.desht.scrollingmenusign.SMSException;
 import me.desht.scrollingmenusign.SMSMenu;
+import me.desht.scrollingmenusign.SMSMenuItem;
 import me.desht.scrollingmenusign.ScrollingMenuSign;
 import me.desht.scrollingmenusign.enums.SMSMenuAction;
 import me.desht.scrollingmenusign.enums.ViewJustification;
-import me.desht.scrollingmenusign.views.map.SMSMapRenderer;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Material;
+import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.Configuration;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.map.MapCanvas;
 import org.bukkit.map.MapPalette;
 import org.bukkit.map.MapRenderer;
 import org.bukkit.map.MapView;
@@ -52,8 +55,8 @@ import org.bukkit.map.MapView;
  */
 public class SMSMapView extends SMSScrollableView {
 
-	private static final String[] NOT_OWNER = { "\u00a7oThis map belongs", "\u00a7to someone else." };
-	private static final String[] NO_PERM = { "\u00a7oYou do not have", "\u00a7permission to use", "\u00a7map menus." };
+	private static final String[] NOT_OWNER = { "\u00a7oThis map belongs", "\u00a7oto someone else." };
+	private static final String[] NO_PERM = { "\u00a7oYou do not have", "\u00a7opermission to use", "\u00a7omap menus." };
 
 	// magic map X value used by the Courier plugin
 	public static final int COURIER_MAP_X = 2147087904;
@@ -95,17 +98,18 @@ public class SMSMapView extends SMSScrollableView {
 	public SMSMapView(String name, SMSMenu menu) {
 		super(name, menu);
 
-		registerAttribute(IMAGE_FILE, "");
-		registerAttribute(FONT, "Serif");
-		registerAttribute(FONT_SIZE, 9);
+		Configuration config = ScrollingMenuSign.getInstance().getConfig();
+		registerAttribute(IMAGE_FILE, "", "Image to use as map background");
+		registerAttribute(FONT, config.getString("sms.maps.font"), "Java font for map text drawing");
+		registerAttribute(FONT_SIZE, config.getInt("sms.maps.fontsize"), "Font size for map text drawing");
 
 		x = 4;
-		y = 10;	// leaving space for the map name in the top left
+		y = 0;
 		width = 120;
-		height = 120;
+		height = 128;
 		lineSpacing = 0;
 
-		mapRenderer = new SMSMapRenderer(this);
+		mapRenderer = new SMSMapRenderer();
 	}
 
 	private void loadBackgroundImage() {
@@ -345,7 +349,7 @@ public class SMSMapView extends SMSScrollableView {
 	@Override
 	public void update(Observable menu, Object arg1) {
 		super.update(menu, arg1);
-		
+
 		switch ((SMSMenuAction) arg1) {
 		case REPAINT: case SCROLLED:
 			if (mapView == null)
@@ -362,7 +366,8 @@ public class SMSMapView extends SMSScrollableView {
 	}
 
 	@Override
-	public void erase() {
+	public void onDeletion() {
+		super.onDeletion();
 		if (mapView != null) {
 			allMapViews.remove(mapView.getId());
 			mapView.removeRenderer(getMapRenderer());
@@ -406,20 +411,25 @@ public class SMSMapView extends SMSScrollableView {
 	 * @param mapId		ID of the map that will be used as a view
 	 * @return	The SMSMapView object that was just created
 	 * @throws SMSException if the given mapId is already a view
-	 */	
-	public static SMSMapView addMapToMenu(String viewName, SMSMenu menu, short mapId) throws SMSException {
+	 */
+	public static SMSMapView addMapToMenu(String viewName, SMSMenu menu, short mapId, CommandSender owner) throws SMSException {
 		if (SMSMapView.checkForMapId(mapId)) {
-			throw new SMSException("This map already has a menu view associated with it");
+			throw new SMSException("Map #" + mapId + " already has a menu view associated with it");
 		}
+		if (SMSMapView.usedByOtherPlugin(mapId)) {
+			throw new SMSException("Map #" + mapId + " is used by another plugin");
+		}
+
 		SMSMapView mapView = new SMSMapView(viewName, menu);
 		mapView.register();
+		mapView.setAttribute(OWNER, mapView.getOwnerName(owner));
 		mapView.setMapId(mapId);
 		mapView.update(menu, SMSMenuAction.REPAINT);
 
-		return mapView;		
+		return mapView;
 	}
-	public static SMSMapView addMapToMenu(SMSMenu menu, short mapId) throws SMSException {
-		return addMapToMenu(null, menu, mapId);
+	public static SMSMapView addMapToMenu(SMSMenu menu, short mapId, CommandSender owner) throws SMSException {
+		return addMapToMenu(null, menu, mapId, owner);
 	}
 
 	/**
@@ -462,11 +472,8 @@ public class SMSMapView extends SMSScrollableView {
 	 * @return	True if it's used by someone else, false otherwise
 	 * @throws IllegalArgumentException if the given item is not a map
 	 */
-	public static boolean usedByOtherPlugin(ItemStack item) {
-		if (item.getType() != Material.MAP)
-			throw new IllegalArgumentException("Item is not a map: " + item.getType());
-
-		MapView mapView = Bukkit.getServer().getMap(item.getDurability());
+	public static boolean usedByOtherPlugin(short mapId) {
+		MapView mapView = Bukkit.getServer().getMap(mapId);
 
 		for (MapRenderer r : mapView.getRenderers()) {
 			if (!r.getClass().getPackage().getName().startsWith("org.bukkit")) {
@@ -496,8 +503,6 @@ public class SMSMapView extends SMSScrollableView {
 	public BufferedImage renderImage(Player player) {
 		if (mapView == null) return null;
 
-		int yPos = getY();
-
 		BufferedImage result = backgroundImage == null ? new BufferedImage(128, 128, BufferedImage.TYPE_INT_ARGB): deepCopy(backgroundImage);
 
 		Graphics g = result.getGraphics();
@@ -506,6 +511,7 @@ public class SMSMapView extends SMSScrollableView {
 
 		FontMetrics metrics = g.getFontMetrics();
 		SMSMenu menu = getActiveMenu(player.getName());
+		Configuration config = ScrollingMenuSign.getInstance().getConfig();
 
 		if (!hasOwnerPermission(player)) {
 			drawMessage(g, NOT_OWNER);
@@ -513,17 +519,26 @@ public class SMSMapView extends SMSScrollableView {
 		} else if (!PermissionUtils.isAllowedTo(player, "scrollingmenusign.use.map")) {
 			drawMessage(g, NO_PERM);
 			return result;
-		} 
+		}
+
+		int lineHeight = metrics.getHeight() + getLineSpacing();
+		int yPos = getY() + lineHeight;
 
 		// draw the title line(s)
 		List<String> titleLines = splitTitle(player.getName());
 		for (String line : titleLines) {
 			drawText(g, getTitleJustification(), yPos, line);
-			yPos += metrics.getHeight() + getLineSpacing();	
+			yPos += lineHeight;
 		}
+		Color c = g.getColor();
+		g.setColor(minecraftToJavaColor(7));
+		yPos++;
+		int lineY = yPos + 1 - lineHeight;
+		g.drawLine(x, lineY, x + width, lineY);
+		g.setColor(c);
 
-		String prefix1 = ScrollingMenuSign.getInstance().getConfig().getString("sms.item_prefix.not_selected", "  ");
-		String prefix2 = ScrollingMenuSign.getInstance().getConfig().getString("sms.item_prefix.selected", "> ");
+		String prefix1 = config.getString("sms.item_prefix.not_selected", "  ");
+		String prefix2 = config.getString("sms.item_prefix.selected", "> ");
 
 		int nDisplayable = (getHeight() - yPos) / (metrics.getHeight() + getLineSpacing());
 
@@ -539,7 +554,7 @@ public class SMSMapView extends SMSScrollableView {
 					lineText = prefix1 + lineText;
 				}
 				drawText(g, itemJust, yPos, lineText);
-				yPos += metrics.getHeight() + getLineSpacing();
+				yPos += lineHeight;
 				current++;
 				if (current > getActiveMenuItemCount(player.getName()))
 					current = 1;
@@ -548,12 +563,33 @@ public class SMSMapView extends SMSScrollableView {
 			}
 		}
 
+		SMSMenuItem item = menu.getItemAt(getScrollPos(player.getName()));
+		if (item != null && config.getBoolean("sms.maps.show_tooltips")) {
+			String[] lore = item.getLore();
+			if (lore.length > 0) {
+				int y1 = lineHeight * (titleLines.size() + 3);
+				int x1 = x + 10;
+				int y2 = y1 + lineHeight * lore.length + 1;
+				int x2 = x + width;
+				g.setColor(minecraftToJavaColor(14));
+				g.fillRect(x1, y1, x2 - x1, y2 - y1);
+				g.setColor(minecraftToJavaColor(6));
+				g.draw3DRect(x1, y1, x2 - x1, y2 - y1, true);
+				yPos = y2 - (2 + lineHeight * (lore.length - 1));
+				g.setClip(x1, y1, x2 - x1, y2 - y1);
+				for (String l : lore) {
+					g.setColor(minecraftToJavaColor(0));
+					drawText(g, x1 + 2, yPos, l);
+					yPos += lineHeight;
+				}
+			}
+		}
 		return result;
 	}
 
 	private void drawText(Graphics g, ViewJustification itemJust, int y, String text) {
 		FontMetrics metrics = g.getFontMetrics();
-		int textWidth = metrics.stringWidth(text);
+		int textWidth = metrics.stringWidth(text.replaceAll("\u00a7.", ""));
 		drawText(g, getXOffset(itemJust, textWidth), y, text);
 	}
 
@@ -653,26 +689,49 @@ public class SMSMapView extends SMSScrollableView {
 		return new BufferedImage(cm, raster, isAlphaPremultiplied, null);
 	}
 
-	private static final Color[] colors = new Color[16];
+	// Minecraft map palette is very limited.  Not all colours will look good.
+	private static final byte[] mcToPaletteIdx = new byte[] {
+		44,	// 0 black
+		48, // 1 blue
+		28, // 2 green
+		21, // 3 cyan
+		16, // 4 red
+		20,	// 5 purple (looks blueish)
+		40,	// 6 yellow (looks brown)
+		13,	// 7 grey
+		12,	// 8 dark grey
+		50,	// 9 bright blue
+		6,	// 10 bright green
+		22,	// 11 bright cyan
+		18,	// 12 bright red
+		21, // 13 pink (much too blue)
+		10, // 14 bright yellow (too brown)
+		34, // 15 white
+	};
+
+	private static final Color[] colors = new Color[mcToPaletteIdx.length];
 	static {
-		colors[0] = new Color(0, 0, 0);
-		colors[1] = new Color(0, 0, 128);
-		colors[2] = new Color(0, 128, 0);
-		colors[3] = new Color(0, 128, 128);
-		colors[4] = new Color(128, 0, 0);
-		colors[5] = new Color(128, 0, 128);
-		colors[6] = new Color(128, 128, 0);
-		colors[7] = new Color(128, 128, 128);
-		colors[8] = new Color(64, 64, 64);
-		colors[9] = new Color(0, 0, 255);
-		colors[10] = new Color(0, 255, 0);
-		colors[11] = new Color(0, 255, 255);
-		colors[12] = new Color(255, 0, 0);
-		colors[13] = new Color(255, 0, 255);
-		colors[14] = new Color(255, 255, 0);
-		colors[15] = new Color(255, 255, 255);
+		for (int i = 0; i < mcToPaletteIdx.length; i++) {
+			colors[i] = MapPalette.getColor(mcToPaletteIdx[i]);
+		}
 	}
 	private static Color minecraftToJavaColor(int mcColor) {
 		return colors[mcColor];
+	}
+
+	private class SMSMapRenderer extends MapRenderer {
+		public SMSMapRenderer() {
+			super(true);
+		}
+
+		@Override
+		public void render(MapView map, MapCanvas canvas, Player player) {
+			if (isDirty(player.getName())) {
+				BufferedImage img = renderImage(player);
+				canvas.drawImage(0, 0, img);
+				setDirty(player.getName(), false);
+				player.sendMap(map);
+			}
+		}
 	}
 }

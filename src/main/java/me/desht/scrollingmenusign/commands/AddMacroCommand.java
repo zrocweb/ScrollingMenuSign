@@ -1,17 +1,18 @@
 package me.desht.scrollingmenusign.commands;
 
+import java.util.List;
+
+import me.desht.dhutils.MiscUtil;
 import me.desht.scrollingmenusign.SMSMacro;
 import me.desht.scrollingmenusign.SMSPersistence;
-import me.desht.dhutils.MiscUtil;
-import me.desht.dhutils.commands.AbstractCommand;
 
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.Plugin;
 
-public class AddMacroCommand extends AbstractCommand {
+public class AddMacroCommand extends SMSAbstractCommand {
 
 	public AddMacroCommand() {
-		super("sms m a", 2);
+		super("sms macro add", 2);
 		setPermissionNode("scrollingmenusign.commands.macro");
 		setUsage("/sms macro add <macro> <command>");
 		setQuotedArgs(true);
@@ -28,4 +29,13 @@ public class AddMacroCommand extends AbstractCommand {
 		return true;
 	}
 
+	@Override
+	public List<String> onTabComplete(Plugin plugin, CommandSender sender, String[] args) {
+		if (args.length == 1) {
+			return getMacroCompletions(sender, args[0]);
+		} else {
+			showUsage(sender);
+			return noCompletions(sender);
+		}
+	}
 }

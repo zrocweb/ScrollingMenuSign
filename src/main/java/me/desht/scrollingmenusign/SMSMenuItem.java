@@ -1,7 +1,6 @@
 package me.desht.scrollingmenusign;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -25,7 +24,7 @@ public class SMSMenuItem implements Comparable<SMSMenuItem>, SMSUseLimitable {
 	private final String message;
 	private final List<String> lore;
 	private final MaterialWithData iconMaterial;
-	private final SMSRemainingUses uses;
+	private SMSRemainingUses uses;
 	private final SMSMenu menu;
 
 	public SMSMenuItem(SMSMenu menu, String label, String command, String message) {
@@ -36,7 +35,7 @@ public class SMSMenuItem implements Comparable<SMSMenuItem>, SMSUseLimitable {
 	public SMSMenuItem(SMSMenu menu, String label, String command, String message, String iconMaterialName) {
 		this(menu, label, command, message, iconMaterialName, new String[0]);
 	}
-	
+
 	public SMSMenuItem(SMSMenu menu, String label, String command, String message, String iconMaterialName, String[] lore) {
 		if (label == null || command == null || message == null)
 			throw new NullPointerException();
@@ -56,7 +55,6 @@ public class SMSMenuItem implements Comparable<SMSMenuItem>, SMSUseLimitable {
 			this.lore.add(MiscUtil.parseColourSpec(l));
 		}
 		this.uses = new SMSRemainingUses(this);
-		for (String l : this.lore) { System.out.println("lore = " + l); }
 	}
 
 	public SMSMenuItem(SMSMenu menu, ConfigurationSection node) throws SMSException {
@@ -125,7 +123,7 @@ public class SMSMenuItem implements Comparable<SMSMenuItem>, SMSUseLimitable {
 	public MaterialWithData getIconMaterial() {
 		return iconMaterial;
 	}
-	
+
 	/**
 	 * Get the lore (tooltip) for this menu item.  Note that not all view types necessarily support
 	 * display of lore.
@@ -135,11 +133,11 @@ public class SMSMenuItem implements Comparable<SMSMenuItem>, SMSUseLimitable {
 	public String[] getLore() {
 		return lore.toArray(new String[lore.size()]);
 	}
-	
+
 	public List<String> getLoreAsList() {
 		return new ArrayList<String>(lore);
 	}
-	
+
 	/**
 	 * Append a line of text to the item's lore.
 	 * 
@@ -148,7 +146,7 @@ public class SMSMenuItem implements Comparable<SMSMenuItem>, SMSUseLimitable {
 	public void appendLore(String l) {
 		lore.add(l);
 	}
-	
+
 	/**
 	 * Replace the item's lore with a line of text.
 	 * 
@@ -229,7 +227,7 @@ public class SMSMenuItem implements Comparable<SMSMenuItem>, SMSUseLimitable {
 			}
 		} else {
 			MiscUtil.alertMessage(player, message);
-		}	
+		}
 	}
 
 	private static void sendFeedback(Player player, List<String> messages, Set<String> history) {
@@ -253,6 +251,15 @@ public class SMSMenuItem implements Comparable<SMSMenuItem>, SMSUseLimitable {
 	 */
 	public SMSRemainingUses getUseLimits() {
 		return uses;
+	}
+
+	/**
+	 * Sets the remaining use details for this menu item.
+	 *
+	 * @param uses the remaining use details
+	 */
+	public void setUseLimits(SMSRemainingUses uses) {
+		this.uses = uses;
 	}
 
 	/**

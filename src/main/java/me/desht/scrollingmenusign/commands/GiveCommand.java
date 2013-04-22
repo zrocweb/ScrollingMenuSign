@@ -1,5 +1,9 @@
 package me.desht.scrollingmenusign.commands;
 
+import java.util.Arrays;
+import java.util.List;
+
+import me.desht.dhutils.MiscUtil;
 import me.desht.scrollingmenusign.PopupBook;
 import me.desht.scrollingmenusign.SMSException;
 import me.desht.scrollingmenusign.SMSMenu;
@@ -7,8 +11,6 @@ import me.desht.scrollingmenusign.views.PoppableView;
 import me.desht.scrollingmenusign.views.SMSInventoryView;
 import me.desht.scrollingmenusign.views.SMSMapView;
 import me.desht.scrollingmenusign.views.SMSView;
-import me.desht.dhutils.MiscUtil;
-import me.desht.dhutils.commands.AbstractCommand;
 
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -19,14 +21,14 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.map.MapView;
 import org.bukkit.plugin.Plugin;
 
-public class GiveCommand extends AbstractCommand {
+public class GiveCommand extends SMSAbstractCommand {
 
 	public GiveCommand() {
-		super("sms gi", 2, 4);
-		setPermissionNode("scrollingmenusign.commands.givemap");
+		super("sms give", 2, 4);
+		setPermissionNode("scrollingmenusign.commands.give");
 		setUsage(new String[] {
 				"/sms give map <menu-name|view-name|map-id> [<amount>] [<player>]",
-				"/sms give book <menu-name|view-name> [<amount>] [<player>]",	
+				"/sms give book <menu-name|view-name> [<amount>] [<player>]",
 		});
 	}
 
@@ -52,7 +54,7 @@ public class GiveCommand extends AbstractCommand {
 		}
 
 		if (args[0].startsWith("m")) {
-			short mapId = getMapId(targetPlayer, args[1]);
+			short mapId = getMapId(sender, targetPlayer, args[1]);
 			giveMap(sender, targetPlayer, mapId, amount);
 		} else if (args[0].startsWith("b")) {
 			giveBook(sender, targetPlayer, args[1], amount);
@@ -62,8 +64,9 @@ public class GiveCommand extends AbstractCommand {
 		return true;
 	}
 
-	private short getMapId(Player target, String argStr) {
+	private short getMapId(CommandSender sender, Player target, String argStr) {
 		short mapId;
+
 		try {
 			// first, see if it's a map ID
 			mapId = Short.parseShort(argStr);
@@ -77,15 +80,15 @@ public class GiveCommand extends AbstractCommand {
 				mapId = ((SMSMapView) v).getMapView().getId();
 			} else {
 				// or perhaps a menu name?
-				SMSMenu menu = SMSMenu.getMenu(argStr);
+				SMSMenu menu = getMenu(sender, argStr);
 				SMSView v = SMSView.findView(menu, SMSMapView.class);
 				if (v == null) {
 					// this menu doesn't have a map view - make one!
 					mapId = Bukkit.createMap(target.getWorld()).getId();
-					v = SMSMapView.addMapToMenu(menu, mapId);
+					v = SMSMapView.addMapToMenu(menu, mapId, sender);
 				} else {
 					// menu has a map view already - use that map ID
-					mapId = ((SMSMapView) v).getMapView().getId();
+					mapId = ((SMSMapView)v).getMapView().getId();
 				}
 			}
 		}
@@ -106,7 +109,7 @@ public class GiveCommand extends AbstractCommand {
 			SMSMenu menu = SMSMenu.getMenu(argStr);
 			view = SMSView.findView(menu, PoppableView.class);
 			if (view == null) {
-				view = SMSInventoryView.addInventoryViewToMenu(menu);
+				view = SMSInventoryView.addInventoryViewToMenu(menu, sender);
 			}
 		}
 
@@ -132,6 +135,10 @@ public class GiveCommand extends AbstractCommand {
 
 		ItemStack stack = new ItemStack(Material.MAP, amount);
 		stack.setDurability(mapId);
+		SMSMapView v = SMSMapView.getViewForId(mapId);
+		if (v != null) {
+			v.setMapItemName(stack);
+		}
 		targetPlayer.getInventory().addItem(stack);
 		targetPlayer.updateInventory();
 
@@ -142,4 +149,14 @@ public class GiveCommand extends AbstractCommand {
 		}
 	}
 
+	@Override
+	public List<String> onTabComplete(Plugin plugin, CommandSender sender, String[] args) {
+		switch (args.length) {
+		case 1:
+			return filterPrefix(sender, Arrays.asList(new String[] { "book", "map" }), args[0]);
+		default:
+			showUsage(sender);
+			return noCompletions(sender);
+		}
+	}
 }

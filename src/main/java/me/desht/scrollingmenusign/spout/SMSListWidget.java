@@ -1,23 +1,23 @@
 package me.desht.scrollingmenusign.spout;
 
+import me.desht.dhutils.LogUtils;
+import me.desht.dhutils.MiscUtil;
 import me.desht.scrollingmenusign.SMSException;
 import me.desht.scrollingmenusign.SMSMenu;
 import me.desht.scrollingmenusign.SMSMenuItem;
 import me.desht.scrollingmenusign.ScrollingMenuSign;
-import me.desht.dhutils.MiscUtil;
-import me.desht.dhutils.LogUtils;
-import me.desht.dhutils.PermissionUtils;
 import me.desht.scrollingmenusign.views.SMSScrollableView;
 import me.desht.scrollingmenusign.views.SMSSpoutView;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
-import org.bukkit.configuration.Configuration;
 import org.getspout.spoutapi.gui.Color;
 import org.getspout.spoutapi.gui.GenericListWidget;
 import org.getspout.spoutapi.gui.ListWidgetItem;
 import org.getspout.spoutapi.gui.Scrollable;
 import org.getspout.spoutapi.player.SpoutPlayer;
+
+import com.google.common.base.Joiner;
 
 public class SMSListWidget extends GenericListWidget {
 	private static final float THRESHOLD = 129;
@@ -38,24 +38,16 @@ public class SMSListWidget extends GenericListWidget {
 	public SMSSpoutView getView() {
 		return view;
 	}
-	
+
 	public void ignoreNextSelection(boolean ignore) {
 		this.ignoreNextSelection = ignore;
 	}
 
 	public Scrollable updateBackground() {
-		Configuration cfg = ScrollingMenuSign.getInstance().getConfig();
-		String bgCol = view.getAttributeAsString(SMSSpoutView.BACKGROUND, cfg.getString("sms.spout.list_background"));
-		Color c;
-		try {
-			c = new Color(bgCol);
-			String a = view.getAttributeAsString(SMSSpoutView.ALPHA, cfg.getString("sms.spout.list_alpha"));
-			c.setAlpha(Float.parseFloat(a));
-		} catch (NumberFormatException	e) {
-			LogUtils.warning("Invalid Spout view colour/alpha specification for " + view.getName() + ": using default settings");
-			c = new Color(cfg.getDefaults().getString("sms.spout.list_background"));
-			c.setAlpha((float) cfg.getDefaults().getDouble("sms.spout.list_alpha"));
-		}
+		HexColor cw = (HexColor) view.getAttribute(SMSSpoutView.BACKGROUND);
+		double alpha = (Double) view.getAttribute(SMSSpoutView.ALPHA);
+		Color c = cw.getColor();
+		c.setAlpha((float)alpha);
 		LogUtils.finer("updateBackground: view = " + view.getName() + " background = " + c.toString());
 
 		// choose a contrasting text colour - black for a pale background, white for a dark background
@@ -118,14 +110,13 @@ public class SMSListWidget extends GenericListWidget {
 	private void populateMenu() {
 		clear();
 
-		boolean showCommand =
-				ScrollingMenuSign.getInstance().getConfig().getBoolean("sms.spout.show_command_text")
-				&& PermissionUtils.isAllowedTo(sp, "scrollingmenusign.commands.show");
+		boolean showTooltips = ScrollingMenuSign.getInstance().getConfig().getBoolean("sms.spout.show_tooltips");
 
 		int nItems = view.getActiveMenuItemCount(sp.getName());
 		for (int i = 1; i <= nItems; i++) {
 			SMSMenuItem item = view.getActiveMenuItemAt(sp.getName(), i);
-			addItem(new ListWidgetItem(defaultTextColor + view.variableSubs(item.getLabel()), showCommand ? item.getCommand() : ""));
+			String lore = Joiner.on(" ").join(item.getLore());
+			addItem(new ListWidgetItem(defaultTextColor + view.variableSubs(item.getLabel()), showTooltips ? lore : ""));
 		}
 	}
 
